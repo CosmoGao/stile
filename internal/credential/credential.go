@@ -174,6 +174,19 @@ func (s *Service) Replace(ctx context.Context, id string, in Input) (Credential,
 	return cur, nil
 }
 
+// Lookup returns the public credential fields. It does not decrypt the secret.
+func (s *Service) Lookup(ctx context.Context, id string) (Credential, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, kind, login_name, fingerprint, created_at, updated_at FROM credentials WHERE id = ?`, id)
+	c, err := scanCredential(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Credential{}, ErrNotFound
+	}
+	if err != nil {
+		return Credential{}, err
+	}
+	return c, nil
+}
+
 // Reveal decrypts one credential for the admin view. Callers must not log the
 // plaintext. This does not write a row.
 func (s *Service) Reveal(ctx context.Context, id string) (Credential, string, error) {

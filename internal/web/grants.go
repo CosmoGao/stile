@@ -92,8 +92,9 @@ func userAssetView(a asset.UserAsset) viewAsset {
 	}
 }
 
-// assetOpen is the authorization gate for opening an asset.
-// This segment does not dial the target and does not dial guacd.
+// assetOpen checks authorization before showing an SSH terminal.
+// A failed check does not decrypt a credential and does not dial.
+// RDP is still not connected and does not use guacd.
 func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
@@ -104,10 +105,10 @@ func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	item, err := s.assets.GetUser(r.Context(), id)
+	pub, err := s.assets.GetUser(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, asset.ErrNotFound) {
-			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil)
+			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil, false)
 			return
 		}
 		log.Printf("open asset: %v", err)
@@ -122,21 +123,48 @@ func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	if !allowed {
 		// Do not echo the asset. No credential is decrypted and nothing is dialed.
-		s.renderOpen(w, r, u, http.StatusForbidden, openDenied, nil)
+		s.renderOpen(w, r, u, http.StatusForbidden, openDenied, nil, false)
 		return
 	}
-	view := userAssetView(item)
-	s.renderOpen(w, r, u, http.StatusOK, "", &view)
+	full, err := s.assets.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, asset.ErrNotFound) {
+			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil, false)
+			return
+		}
+		log.Printf("open asset: %v", err)
+		http.Error(w, "内部错误", http.StatusInternalServerError)
+		return
+	}
+	view := userAssetView(pub)
+	if full.Protocol != asset.ProtocolSSH {
+		s.renderOpen(w, r, u, http.StatusOK, "这一段不打开 RDP，也不连接 guacd。", &view, false)
+		return
+	}
+	if full.CredentialID == "" {
+		s.renderOpen(w, r, u, http.StatusConflict, "未绑定凭据，打不开", &view, false)
+		return
+	}
+	if full.HostKeyFingerprint == "" {
+		s.renderOpen(w, r, u, http.StatusConflict, "还没有登记主机密钥指纹，不连接", &view, false)
+		return
+	}
+	s.renderOpen(w, r, u, http.StatusOK, "", &view, true)
 }
 
-func (s *Server) renderOpen(w http.ResponseWriter, r *http.Request, u identity.User, status int, msg string, item *viewAsset) {
+func (s *Server) renderOpen(w http.ResponseWriter, r *http.Request, u identity.User, status int, msg string, item *viewAsset, terminal bool) {
 	vu := s.view(u, u.ID)
+	title := "打开"
+	if terminal && item != nil {
+		title = item.Name
+	}
 	s.render(w, status, "open", page{
-		Title: "打开",
-		Error: msg,
-		CSRF:  s.ensureCSRF(w, r),
-		User:  &vu,
-		Open:  item,
+		Title:    title,
+		Error:    msg,
+		CSRF:     s.ensureCSRF(w, r),
+		User:     &vu,
+		Open:     item,
+		Terminal: terminal,
 	})
 }
 

@@ -36,14 +36,14 @@ func TestMigrateOnceAndForeignKeys(t *testing.T) {
 	for _, n := range names {
 		got[n] = true
 	}
-	for _, want := range []string{"users", "login_tokens", "schema_migrations", "credentials", "assets", "user_groups", "group_members", "grants"} {
+	for _, want := range []string{"users", "login_tokens", "schema_migrations", "credentials", "assets", "user_groups", "group_members", "grants", "web_sessions"} {
 		if !got[want] {
 			t.Fatalf("missing table %s in %v", want, names)
 		}
 	}
 	for _, n := range names {
 		switch n {
-		case "users", "login_tokens", "schema_migrations", "credentials", "assets", "user_groups", "group_members", "grants":
+		case "users", "login_tokens", "schema_migrations", "credentials", "assets", "user_groups", "group_members", "grants", "web_sessions":
 		default:
 			t.Fatalf("unexpected table %s", n)
 		}
@@ -69,8 +69,8 @@ func TestMigrateOnceAndForeignKeys(t *testing.T) {
 	if err := db2.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 3 {
-		t.Fatalf("migrations applied %d times, want 3", n)
+	if n != 4 {
+		t.Fatalf("migrations applied %d times, want 4", n)
 	}
 	_ = sql.ErrNoRows
 }

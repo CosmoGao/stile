@@ -101,6 +101,54 @@ func (s *Service) List(ctx context.Context) ([]Asset, error) {
 }
 
 // GetUser loads the public columns only. It does not read credential_id.
+func (s *Service) Get(ctx context.Context, id string) (Asset, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT a.id, a.name, a.protocol, a.host, a.port, a.credential_id, c.name, a.ssh_host_key_fingerprint, a.created_at, a.updated_at
+		FROM assets a LEFT JOIN credentials c ON c.id = a.credential_id
+		WHERE a.id = ?`, id)
+	a, err := scanAsset(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Asset{}, ErrNotFound
+	}
+	if err != nil {
+		return Asset{}, err
+	}
+	return a, nil
+}
+
+// SetHostKeyFingerprint writes the SSH host key fingerprint an administrator
+// confirmed. It can replace an existing value. It does not open a session.
+func (s *Service) SetHostKeyFingerprint(ctx context.Context, id, fingerprint string) error {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if !validLabel(fingerprint, 256) {
+		return ErrBadInput
+	}
+	var protocol string
+	err := s.db.QueryRowContext(ctx, `SELECT protocol FROM assets WHERE id = ?`, id).Scan(&protocol)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if protocol != ProtocolSSH {
+		return ErrBadInput
+	}
+	now := s.now().UTC()
+	res, err := s.db.ExecContext(ctx, `UPDATE assets SET ssh_host_key_fingerprint = ?, updated_at = ? WHERE id = ?`,
+		fingerprint, identity.FormatTime(now), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Service) GetUser(ctx context.Context, id string) (UserAsset, error) {
 	var a UserAsset
 	err := s.db.QueryRowContext(ctx, `SELECT id, name, protocol, host, port FROM assets WHERE id = ?`, id).Scan(

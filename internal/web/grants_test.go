@@ -125,14 +125,14 @@ func TestGrantsVisibilityAndOpen(t *testing.T) {
 		t.Fatalf("alice hidden open %d %s", status, body)
 	}
 	status, body, _ = get(t, alice, ts.URL+"/assets/"+direct+"/open")
-	if status != http.StatusOK || !strings.Contains(body, "不连接目标机") || !strings.Contains(body, "不连接 guacd") || !strings.Contains(body, "direct-host") {
+	if status != http.StatusConflict || !strings.Contains(body, "还没有登记主机密钥指纹") || !strings.Contains(body, "不连接") || !strings.Contains(body, "direct-host") {
 		t.Fatalf("alice direct open %d %s", status, body)
 	}
-	if strings.Contains(body, credID) || strings.Contains(body, secret) || strings.Contains(body, "credential") {
-		t.Fatal("open page exposes the credential")
+	if strings.Contains(body, "WebSocket") || strings.Contains(body, credID) || strings.Contains(body, secret) || strings.Contains(body, "credential") {
+		t.Fatal("open page connects or exposes the credential")
 	}
 	status, body, _ = get(t, alice, ts.URL+"/assets/"+grouped+"/open")
-	if status != http.StatusOK || !strings.Contains(body, "group-host") || !strings.Contains(body, "不连接目标机") {
+	if status != http.StatusConflict || !strings.Contains(body, "group-host") || !strings.Contains(body, "未绑定凭据") {
 		t.Fatalf("alice group open %d %s", status, body)
 	}
 	status, body, _ = get(t, admin, ts.URL+"/assets/"+hidden+"/open")

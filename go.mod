@@ -3,6 +3,7 @@ module github.com/CosmoGao/stile
 go 1.23.0
 
 require (
+	github.com/coder/websocket v1.8.13
 	github.com/pquerna/otp v1.5.0
 	golang.org/x/crypto v0.39.0
 	modernc.org/sqlite v1.37.1

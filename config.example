@@ -14,3 +14,6 @@ lockout_failures 4
 
 # 示例，数值未定
 lockout_duration 10m
+
+# 外部 guacd 1.4.0 的地址。不写这一项时，网页 RDP 连不上，网页 SSH 不受影响。
+# guacd 127.0.0.1:4822

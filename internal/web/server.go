@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	"github.com/CosmoGao/stile/internal/asset"
@@ -27,7 +28,7 @@ import (
 //go:embed templates/pages.html
 var templateFS embed.FS
 
-//go:embed static/xterm.js static/xterm.css static/xterm-addon-fit.js
+//go:embed static/xterm.js static/xterm.css static/xterm-addon-fit.js static/guacamole-common.js
 var browserFS embed.FS
 
 const (
@@ -47,6 +48,7 @@ type Server struct {
 	sessions *sessionlog.Service
 	tmpl     *template.Template
 	now      func() time.Time
+	guacd    atomic.Value
 }
 
 type page struct {
@@ -71,6 +73,7 @@ type page struct {
 	TOTPEnabled    bool
 	TOTPPending    bool
 	Terminal       bool
+	Desktop        bool
 	Probed         string
 }
 
@@ -110,6 +113,7 @@ func New(cfg config.Config, db *sql.DB, key []byte) (*Server, error) {
 	s.assets = asset.New(db, func() time.Time { return s.now() })
 	s.grants = grant.New(db, func() time.Time { return s.now() })
 	s.sessions = sessionlog.New(db, func() time.Time { return s.now() })
+	s.guacd.Store(cfg.GuacdAddress)
 	return s, nil
 }
 
@@ -151,9 +155,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets", s.assetsVisible)
 	mux.HandleFunc("GET /assets/{id}/open", s.assetOpen)
 	mux.HandleFunc("GET /assets/{id}/ssh", s.sshSocket)
+	mux.HandleFunc("GET /assets/{id}/rdp", s.rdpSocket)
 	mux.HandleFunc("GET /static/xterm.js", staticFile("xterm.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("GET /static/xterm.css", staticFile("xterm.css", "text/css; charset=utf-8"))
 	mux.HandleFunc("GET /static/xterm-addon-fit.js", staticFile("xterm-addon-fit.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("GET /static/guacamole-common.js", staticFile("guacamole-common.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("GET /admin/assets", s.assetsGet)
 	mux.HandleFunc("POST /admin/assets", s.assetsCreate)
 	mux.HandleFunc("POST /admin/assets/{id}/probe", s.assetProbe)

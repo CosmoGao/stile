@@ -208,7 +208,7 @@ func (s *Server) endSession(id string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := s.sessions.End(ctx, id); err != nil {
-		log.Printf("ssh session end failed")
+		log.Printf("session end failed")
 	}
 }
 

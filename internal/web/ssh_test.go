@@ -252,7 +252,7 @@ func TestWebSSH(t *testing.T) {
 			t.Fatalf("admin socket %d", status)
 		}
 		status, body, _ = get(t, alice, ts.URL+"/assets/"+rdp+"/open")
-		if status != http.StatusOK || !strings.Contains(body, "不连接 guacd") || strings.Contains(body, "WebSocket") {
+		if status != http.StatusConflict || !strings.Contains(body, "未绑定凭据") || strings.Contains(body, "WebSocket") || strings.Contains(body, "guacamole") || strings.Contains(body, secret) {
 			t.Fatalf("rdp open %d %s", status, body)
 		}
 		beforeRDP := lab.conns.Load()

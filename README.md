@@ -2,7 +2,7 @@
 
 Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的项目。协议 Apache-2.0。
 
-当前这个程序提供网页登录、本地账号、资产、凭据、用户组、授权，以及网页 SSH。普通用户只能看到直接授给自己的资产，以及授给自己所在组的资产。打开 SSH 之前要检查登录状态、授权、协议、凭据和主机密钥指纹。没通过就不解密，也不发送口令或私钥。RDP 还不连接，也不连接 guacd。不写登录日志。
+当前这个程序提供网页登录、本地账号、资产、凭据、用户组、授权、网页 SSH 和网页 RDP。这是第一版的全部。普通用户只能看到直接授给自己的资产，以及授给自己所在组的资产。打开 SSH 或 RDP 之前要检查登录状态、授权、协议和凭据。没通过就不解密，也不连接目标或 guacd。不写登录日志。
 
 ## 网页
 
@@ -31,7 +31,9 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 - 删除用户或用户组时，成员关系一起删除。删除用户组时，授给该组的授权删除。删除用户时，授给该用户的授权删除。删除资产时，对应授权删除。
 - 打开 SSH 时按这个顺序检查：cookie 仍有效且用户未停用、未锁定；资产在授权并集里，管理员也不跳过；协议是 SSH；已经绑定凭据；已经登记主机密钥指纹。任一步失败都不解密，也不发送口令或私钥。指纹不符就断开，而且尚未发送口令或私钥。比对通过才代填，向 Linux 申请 PTY。不申请端口转发，不走 guacd。
 - 网页终端用 xterm.js，经同源 websocket 连到这个进程。登录凭证是 HttpOnly cookie，页面脚本读不到，也不会把 token、口令或私钥写进页面。
-- 连接建立之后才写网页会话：只有 user_id、asset_id、started_at、ended_at。没有命令、输出、录像或客户端地址。页面关闭或远端断开时写结束。没有会话列表，没有断开按钮，没有空闲超时，没有最长时长。打开失败不写一行。
+- 打开 RDP 时按同一串检查，到协议为止必须是 RDP，并且凭据必须是密码。绑了 SSH 私钥的 RDP 资产打不开，也不连 guacd。通过之后才解密。浏览器按 Guacamole 协议连回这个进程，不直连 guacd。主机、端口、账号、密码由这个进程代填给外部 guacd 1.4.0。不开启磁盘和文件传输。口令和私钥不进 RDP 会话页面。
+- 网页画面用 guacamole-common-js，经同源 websocket 连到这个进程。这是浏览器库，不是 guacd 源码。登录凭证仍是 HttpOnly cookie，不写进页面脚本。
+- 连接建立之后才写网页会话：只有 user_id、asset_id、started_at、ended_at。SSH 和 RDP 用同一张表。没有命令、输出、录像或客户端地址。页面关闭或远端断开时写结束。没有会话列表，没有断开按钮，没有空闲超时，没有最长时长。打开失败不写一行。
 
 `/healthz` 返回 `ok`。
 
@@ -39,9 +41,9 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 
 ## 不做
 
-命令行、AI、MCP、RDP 画面、登录日志、命令记录、会话录像、会话列表、强制断开、空闲超时、文件盘、批量命令、Kubernetes、Telnet、VNC、LDAP、租户。授权没有上传、下载、编辑、删除、重命名、复制粘贴这些细项。
+命令行、AI、MCP、登录日志、命令记录、会话录像、会话列表、强制断开、空闲超时、文件盘、磁盘和文件传输、批量命令、Kubernetes、Telnet、VNC、LDAP、租户。授权没有上传、下载、编辑、删除、重命名、复制粘贴这些细项。不重写 guacd。
 
-`guacd` 1.4.0 使用外部镜像 `guacamole/guacd:1.4.0`，不进本仓库源码。当前程序不会连接 guacd。网页 SSH 也不经过它。浏览器不直连 guacd。
+`guacd` 1.4.0 使用外部镜像 `guacamole/guacd:1.4.0`，不进本仓库源码，也不打进 Stile 镜像。网页 RDP 由这个进程连接它。网页 SSH 不经过它。guacd 没启动时，网页 SSH 仍然可以打开。浏览器不直连 guacd。
 
 ## 配置
 
@@ -60,7 +62,7 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 - `STILE_LOCKOUT_FAILURES`：失败多少次后锁定
 - `STILE_LOCKOUT_DURATION`：锁定多久，例如 `10m`
 - `STILE_CONFIG`：配置文件路径
-- `GUACD_ADDRESS`：预留给以后，当前程序不连接 guacd
+- `GUACD_ADDRESS`：外部 guacd 1.4.0 的地址，例如 `127.0.0.1:4822`。配置文件里的键是 `guacd`，这个环境变量会覆盖它。不设置时网页 RDP 连不上，网页 SSH 不受影响
 
 ## 页面
 
@@ -70,10 +72,12 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 - `/admin/users`：用户
 - `/account/totp`：自己的二次验证
 - `/assets`：已登录用户的资产列表。普通用户只看到授权并集，不带 credential_id。管理员看到全部资产，可以带 credential_id
-- `/assets/{id}/open`：已授权且指纹已登记的 SSH 资产打开 xterm.js。没授权、没凭据或没指纹都不连接
-- `/assets/{id}/ssh`：同源 websocket。浏览器带上 HttpOnly cookie，页面里没有登录凭证
+- `/assets/{id}/open`：已授权的 SSH 打开 xterm.js；已授权且凭据是密码的 RDP 打开画面。没授权、协议不对、没凭据、RDP 绑了 SSH 私钥，或 SSH 没指纹，都不连接
+- `/assets/{id}/ssh`：SSH 的同源 websocket。浏览器带上 HttpOnly cookie，页面里没有登录凭证
+- `/assets/{id}/rdp`：RDP 的同源 websocket，Guacamole 协议。浏览器带上 HttpOnly cookie，不直连 guacd，请求里没有密码
 - `/admin/assets/{id}/probe`：管理员读取主机密钥指纹。只做密钥交换
 - `/static/xterm.js`、`/static/xterm.css`、`/static/xterm-addon-fit.js`：打进二进制的终端库。xterm.js 是 MIT，许可见 `internal/web/static/xterm.LICENSE`。运行时不跑 npm
+- `/static/guacamole-common.js`：打进二进制的 Guacamole 浏览器库，版本 1.4.0，Apache-2.0，许可见 `internal/web/static/guacamole-common.LICENSE`。不是 guacd 源码
 - `/admin/assets`：管理员登记资产
 - `/admin/credentials`：管理员登记凭据。列表不带秘密
 - `/admin/credentials/{id}`：管理员查看这一条凭据的明文

@@ -23,6 +23,8 @@ type Config struct {
 	SessionTTL      time.Duration
 	LockoutFailures int
 	LockoutDuration time.Duration
+	// GuacdAddress is optional. Empty means RDP cannot dial. SSH does not use it.
+	GuacdAddress string
 }
 
 // Load reads STILE_CONFIG, or /etc/Stile/stile.conf when that file exists,
@@ -144,6 +146,8 @@ func applyKey(cfg *Config, key, val string) error {
 			return fmt.Errorf("lockout_duration: %w", err)
 		}
 		cfg.LockoutDuration = d
+	case "guacd":
+		cfg.GuacdAddress = val
 	default:
 		return fmt.Errorf("unknown key %s", key)
 	}
@@ -182,6 +186,9 @@ func applyEnv(cfg *Config) error {
 			return fmt.Errorf("STILE_LOCKOUT_DURATION: %w", err)
 		}
 		cfg.LockoutDuration = d
+	}
+	if v := os.Getenv("GUACD_ADDRESS"); v != "" {
+		cfg.GuacdAddress = v
 	}
 	return nil
 }

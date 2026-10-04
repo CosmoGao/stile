@@ -40,8 +40,8 @@ type Asset struct {
 	UpdatedAt          time.Time
 }
 
-// UserAsset is what a non-admin may be shown. It has no credential id.
-// This segment does not list assets to non-admins, because nothing is granted yet.
+// UserAsset is what a non-admin may be shown: id, name, protocol, host, and port.
+// It has no credential id and no secret.
 type UserAsset struct {
 	ID       string
 	Name     string
@@ -98,6 +98,21 @@ func (s *Service) List(ctx context.Context) ([]Asset, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// GetUser loads the public columns only. It does not read credential_id.
+func (s *Service) GetUser(ctx context.Context, id string) (UserAsset, error) {
+	var a UserAsset
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, protocol, host, port FROM assets WHERE id = ?`, id).Scan(
+		&a.ID, &a.Name, &a.Protocol, &a.Host, &a.Port,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return UserAsset{}, ErrNotFound
+	}
+	if err != nil {
+		return UserAsset{}, err
+	}
+	return a, nil
 }
 
 func (s *Service) Create(ctx context.Context, in Input) (Asset, error) {

@@ -20,7 +20,9 @@ var (
 	ErrNotFound    = errors.New("not found")
 	ErrSetupClosed = errors.New("setup closed")
 	ErrBadUsername = errors.New("bad username")
+	ErrBadName     = errors.New("bad name")
 	ErrDuplicate   = errors.New("duplicate username")
+	ErrLastAdmin   = errors.New("last admin")
 )
 
 type DBTX interface {

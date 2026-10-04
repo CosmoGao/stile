@@ -21,10 +21,14 @@ import (
 	"github.com/CosmoGao/stile/internal/credential"
 	"github.com/CosmoGao/stile/internal/grant"
 	"github.com/CosmoGao/stile/internal/identity"
+	"github.com/CosmoGao/stile/internal/sessionlog"
 )
 
 //go:embed templates/pages.html
 var templateFS embed.FS
+
+//go:embed static/xterm.js static/xterm.css static/xterm-addon-fit.js
+var browserFS embed.FS
 
 const (
 	sessionCookie = "stile_session"
@@ -34,14 +38,15 @@ const (
 var idPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type Server struct {
-	cfg    config.Config
-	db     *sql.DB
-	auth   *auth.Service
-	creds  *credential.Service
-	assets *asset.Service
-	grants *grant.Service
-	tmpl   *template.Template
-	now    func() time.Time
+	cfg      config.Config
+	db       *sql.DB
+	auth     *auth.Service
+	creds    *credential.Service
+	assets   *asset.Service
+	grants   *grant.Service
+	sessions *sessionlog.Service
+	tmpl     *template.Template
+	now      func() time.Time
 }
 
 type page struct {
@@ -65,6 +70,8 @@ type page struct {
 	TOTPURI        string
 	TOTPEnabled    bool
 	TOTPPending    bool
+	Terminal       bool
+	Probed         string
 }
 
 type viewUser struct {
@@ -102,6 +109,7 @@ func New(cfg config.Config, db *sql.DB, key []byte) (*Server, error) {
 	s.creds = credential.New(db, key, func() time.Time { return s.now() })
 	s.assets = asset.New(db, func() time.Time { return s.now() })
 	s.grants = grant.New(db, func() time.Time { return s.now() })
+	s.sessions = sessionlog.New(db, func() time.Time { return s.now() })
 	return s, nil
 }
 
@@ -142,8 +150,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/grants/{id}/delete", s.grantsRevoke)
 	mux.HandleFunc("GET /assets", s.assetsVisible)
 	mux.HandleFunc("GET /assets/{id}/open", s.assetOpen)
+	mux.HandleFunc("GET /assets/{id}/ssh", s.sshSocket)
+	mux.HandleFunc("GET /static/xterm.js", staticFile("xterm.js", "text/javascript; charset=utf-8"))
+	mux.HandleFunc("GET /static/xterm.css", staticFile("xterm.css", "text/css; charset=utf-8"))
+	mux.HandleFunc("GET /static/xterm-addon-fit.js", staticFile("xterm-addon-fit.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("GET /admin/assets", s.assetsGet)
 	mux.HandleFunc("POST /admin/assets", s.assetsCreate)
+	mux.HandleFunc("POST /admin/assets/{id}/probe", s.assetProbe)
+	mux.HandleFunc("POST /admin/assets/{id}/hostkey", s.assetHostKey)
 	mux.HandleFunc("POST /admin/assets/{id}/delete", s.assetsDelete)
 	mux.HandleFunc("POST /admin/assets/{id}", s.assetsUpdate)
 	mux.HandleFunc("GET /admin/credentials", s.credentialsGet)
@@ -351,8 +365,25 @@ func noticeText(r *http.Request) string {
 		return "已取消授权"
 	case "user-deleted":
 		return "已删除用户"
+	case "hostkey-saved":
+		return "已写入主机密钥指纹"
 	default:
 		return ""
+	}
+}
+
+func staticFile(name, contentType string) http.HandlerFunc {
+	body, err := browserFS.ReadFile("static/" + name)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
 	}
 }
 

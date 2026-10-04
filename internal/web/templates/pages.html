@@ -28,6 +28,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · Stile</title>
+{{if .Terminal}}<link rel="stylesheet" href="/static/xterm.css">{{end}}
 <style>
   body { margin: 0; font: 16px/1.5 "Segoe UI", "Noto Sans SC", sans-serif; color: #1b1b1b; background: #f6f5f3; }
   .wrap { max-width: 52rem; margin: 0 auto; padding: 1.5rem; }
@@ -51,10 +52,12 @@
   textarea { min-height: 7rem; width: min(100%, 36rem); }
   pre { white-space: pre-wrap; background: #fff; padding: 0.6rem; border: 1px solid #e4e0d8; }
   .muted { color: #5c584f; }
+  .wrap.wide { max-width: 76rem; }
+  #term { height: 28rem; width: 100%; }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap{{if .Terminal}} wide{{end}}">
 {{template "header" .}}
 {{end}}
 
@@ -110,10 +113,10 @@
 <p>已登录：{{.User.Username}}</p>
 {{if .User.Admin}}
 <p><a href="/assets">全部资产</a></p>
-<p class="muted">管理资产、凭据、用户组和授权在对应页面。看得到全部资产不等于可以打开。这里不连接目标，也不打开会话。</p>
+<p class="muted">管理资产、凭据、用户组和授权在对应页面。看得到全部资产不等于可以打开。</p>
 {{else}}
 <p><a href="/assets">已授权的资产</a></p>
-<p class="muted">只能看到直接授给自己的，以及授给自己所在组的。这里不连接目标。</p>
+<p class="muted">只能看到直接授给自己的，以及授给自己所在组的。</p>
 {{end}}
 </main>
 {{template "docend" .}}
@@ -226,7 +229,7 @@
 {{template "docstart" .}}
 <main>
 <h1>资产</h1>
-<p class="muted">协议只有 SSH 和 RDP。端口留空时，SSH 用 22，RDP 用 3389。主机密钥指纹只保存填写的值，这里不连接目标，也不做密钥交换。资产上没有口令或私钥。</p>
+<p class="muted">协议只有 SSH 和 RDP。端口留空时，SSH 用 22，RDP 用 3389。读取指纹只做 TCP 连接和 SSH 密钥交换，不读取凭据，不做用户认证。确认后才写入，也可以改写已有指纹。资产上没有口令或私钥。</p>
 {{template "alerts" .}}
 <table>
   <thead>
@@ -259,6 +262,12 @@
           </label>
           <button type="submit">保存绑定</button>
         </form>
+        {{if eq .Protocol "ssh"}}
+        <form class="inline" method="post" action="/admin/assets/{{.ID}}/probe">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">读取指纹</button>
+        </form>
+        {{end}}
         <form class="inline" method="post" action="/admin/assets/{{.ID}}/delete">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <button type="submit">删除</button>
@@ -375,7 +384,7 @@
 <main>
 {{if .User.Admin}}
 <h1>全部资产</h1>
-<p class="muted">这里列出全部资产，是为了管理。没有授权的仍然打不开。这一段不连接目标机，也不连接 guacd。</p>
+<p class="muted">这里列出全部资产，是为了管理。没有授权的仍然打不开。RDP 还不连接，也不连接 guacd。</p>
 {{else}}
 <h1>已授权的资产</h1>
 <p class="muted">只包括直接授给自己的，以及授给自己所在组的。没授权的不在这里。</p>
@@ -406,12 +415,69 @@
 {{define "open"}}
 {{template "docstart" .}}
 <main>
-<h1>打开</h1>
+<h1>{{if .Terminal}}{{.Open.Name}}{{else}}打开{{end}}</h1>
+{{template "alerts" .}}
+{{if .Terminal}}
+<p class="muted">{{.Open.Host}}:{{.Open.Port}}</p>
+<div id="term" data-asset-id="{{.Open.ID}}" data-name="{{.Open.Name}}" data-protocol="{{.Open.Protocol}}" data-host="{{.Open.Host}}" data-port="{{.Open.Port}}"></div>
+<script src="/static/xterm.js"></script>
+<script src="/static/xterm-addon-fit.js"></script>
+<script>
+(function () {
+  var el = document.getElementById("term");
+  var term = new Terminal({cursorBlink: false, fontSize: 14});
+  var fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(el);
+  fit.fit();
+  var proto = location.protocol === "https:" ? "wss://" : "ws://";
+  var ws = new WebSocket(proto + location.host + "/assets/" + el.getAttribute("data-asset-id") + "/ssh");
+  ws.binaryType = "arraybuffer";
+  function sendSize() {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({cols: term.cols, rows: term.rows}));
+    }
+  }
+  ws.onopen = function () { sendSize(); };
+  ws.onmessage = function (ev) {
+    if (ev.data instanceof ArrayBuffer) {
+      term.write(new Uint8Array(ev.data));
+    }
+  };
+  term.onData(function (data) {
+    if (ws.readyState === 1) {
+      ws.send(new TextEncoder().encode(data));
+    }
+  });
+  window.addEventListener("resize", function () {
+    fit.fit();
+    sendSize();
+  });
+})();
+</script>
+{{else if .Open}}
+<p id="open-result" data-asset-id="{{.Open.ID}}" data-name="{{.Open.Name}}" data-protocol="{{.Open.Protocol}}" data-host="{{.Open.Host}}" data-port="{{.Open.Port}}">{{.Open.Name}}，{{.Open.Host}}:{{.Open.Port}}</p>
+{{end}}
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "probe"}}
+{{template "docstart" .}}
+<main>
+<h1>主机密钥指纹</h1>
+<p class="muted">只做了 TCP 连接和 SSH 密钥交换，然后断开。没有读取凭据，没有做用户认证，也没有写会话。</p>
 {{template "alerts" .}}
 {{if .Open}}
-<p id="open-result">已授权。这一段不连接目标机，也不连接 guacd。</p>
-<p data-asset-id="{{.Open.ID}}" data-name="{{.Open.Name}}" data-protocol="{{.Open.Protocol}}" data-host="{{.Open.Host}}" data-port="{{.Open.Port}}">{{.Open.Name}}，{{.Open.Host}}:{{.Open.Port}}</p>
+<p data-asset-id="{{.Open.ID}}" data-name="{{.Open.Name}}">{{.Open.Name}}，{{.Open.Host}}:{{.Open.Port}}</p>
 {{end}}
+<p>指纹 <code id="probed-fingerprint">{{.Probed}}</code></p>
+<form method="post" action="/admin/assets/{{.Open.ID}}/hostkey">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <input type="hidden" name="ssh_host_key_fingerprint" value="{{.Probed}}">
+  <button type="submit">确认写入</button>
+</form>
+<p><a href="/admin/assets">返回</a></p>
 </main>
 {{template "docend" .}}
 {{end}}

@@ -2,7 +2,7 @@
 
 Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的项目。协议 Apache-2.0。
 
-当前这个程序提供网页登录、本地账号、资产和凭据，以及用户组、成员和授权。普通用户只能看到直接授给自己的资产，以及授给自己所在组的资产。打开入口会检查授权；没授权就拒绝。这一段还不连接目标机，也不连接 guacd，不开 SSH 终端或 RDP 画面，也不写登录日志。
+当前这个程序提供网页登录、本地账号、资产、凭据、用户组、授权，以及网页 SSH。普通用户只能看到直接授给自己的资产，以及授给自己所在组的资产。打开 SSH 之前要检查登录状态、授权、协议、凭据和主机密钥指纹。没通过就不解密，也不发送口令或私钥。RDP 还不连接，也不连接 guacd。不写登录日志。
 
 ## 网页
 
@@ -20,7 +20,8 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 
 管理员可以登记资产和凭据：
 
-- 资产是 Linux/SSH 或 Windows/RDP。字段有 id、名称、协议、主机、端口、可空的凭据 id、可空的 SSH 主机密钥指纹和时间。端口留空时 SSH 用 22，RDP 用 3389。主机密钥指纹只是一列，不探测，也不连接目标。资产行上没有口令、私钥或 nonce。
+- 资产是 Linux/SSH 或 Windows/RDP。字段有 id、名称、协议、主机、端口、可空的凭据 id、可空的 SSH 主机密钥指纹和时间。端口留空时 SSH 用 22，RDP 用 3389。资产行上没有口令、私钥或 nonce。
+- 管理员可以读取一台 SSH 资产的主机密钥指纹。这一步只做 TCP 连接和 SSH 密钥交换，显示指纹后断开。不读取凭据，不做用户认证，不写会话。确认之后才写入 `ssh_host_key_fingerprint`，也可以改写已有指纹。没登记指纹的 SSH 资产，打开时不连接。
 - 凭据和资产分开。种类是密码或 SSH 私钥，登录名在凭据上。同一条凭据可以绑到多台资产。仍被引用时不能删除，解除引用之后可以删。
 - 口令和私钥用配置里的那把 32 字节主密钥做 AES-256-GCM。每条单独生成 12 字节 nonce，附加认证数据是凭据 id。密文在库里，主密钥不进 SQLite，也不进仓库。
 - 列表、创建和替换的页面不带口令或私钥。管理员在凭据页单独打开查看，这一次才看到明文。普通用户打不开凭据页和管理资产页，也不能查看。查看不写登录日志，也没有另外的审计表。
@@ -28,7 +29,9 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 - 授权把资产授给用户或用户组。同一资产、同一主体只有一行，没有上传、下载、编辑、删除、重命名、复制粘贴这些细项。
 - 普通用户的资产列表是直接授权和组授权的并集，资产对象不带 credential_id。没授权的不在列表里。管理员看得到全部资产，资产对象可以带 credential_id，仍然不带口令或私钥。两种角色都要有授权才能打开；管理员没有被授到的资产也打不开。
 - 删除用户或用户组时，成员关系一起删除。删除用户组时，授给该组的授权删除。删除用户时，授给该用户的授权删除。删除资产时，对应授权删除。
-- `/assets/{id}/open` 只做授权检查。通过时页面写明还不连接；拒绝时写明没有授权。不向目标拨号，不连接 guacd，不解密凭据。
+- 打开 SSH 时按这个顺序检查：cookie 仍有效且用户未停用、未锁定；资产在授权并集里，管理员也不跳过；协议是 SSH；已经绑定凭据；已经登记主机密钥指纹。任一步失败都不解密，也不发送口令或私钥。指纹不符就断开，而且尚未发送口令或私钥。比对通过才代填，向 Linux 申请 PTY。不申请端口转发，不走 guacd。
+- 网页终端用 xterm.js，经同源 websocket 连到这个进程。登录凭证是 HttpOnly cookie，页面脚本读不到，也不会把 token、口令或私钥写进页面。
+- 连接建立之后才写网页会话：只有 user_id、asset_id、started_at、ended_at。没有命令、输出、录像或客户端地址。页面关闭或远端断开时写结束。没有会话列表，没有断开按钮，没有空闲超时，没有最长时长。打开失败不写一行。
 
 `/healthz` 返回 `ok`。
 
@@ -36,9 +39,9 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 
 ## 不做
 
-命令行、AI、MCP、主机密钥探测、SSH 终端、RDP 画面、登录日志、命令记录、会话录像、文件盘、批量命令、Kubernetes、Telnet、VNC、LDAP、租户。授权没有上传、下载、编辑、删除、重命名、复制粘贴这些细项。
+命令行、AI、MCP、RDP 画面、登录日志、命令记录、会话录像、会话列表、强制断开、空闲超时、文件盘、批量命令、Kubernetes、Telnet、VNC、LDAP、租户。授权没有上传、下载、编辑、删除、重命名、复制粘贴这些细项。
 
-`guacd` 1.4.0 使用外部镜像 `guacamole/guacd:1.4.0`，不进本仓库源码。当前程序不会连接 guacd。浏览器不直连 guacd。
+`guacd` 1.4.0 使用外部镜像 `guacamole/guacd:1.4.0`，不进本仓库源码。当前程序不会连接 guacd。网页 SSH 也不经过它。浏览器不直连 guacd。
 
 ## 配置
 
@@ -67,7 +70,10 @@ Stile（Secure Terminals via Isolated Login Entry）是一个开源、轻量的�
 - `/admin/users`：用户
 - `/account/totp`：自己的二次验证
 - `/assets`：已登录用户的资产列表。普通用户只看到授权并集，不带 credential_id。管理员看到全部资产，可以带 credential_id
-- `/assets/{id}/open`：受授权保护的打开入口。没授权返回拒绝。这一段不连接目标，也不连接 guacd
+- `/assets/{id}/open`：已授权且指纹已登记的 SSH 资产打开 xterm.js。没授权、没凭据或没指纹都不连接
+- `/assets/{id}/ssh`：同源 websocket。浏览器带上 HttpOnly cookie，页面里没有登录凭证
+- `/admin/assets/{id}/probe`：管理员读取主机密钥指纹。只做密钥交换
+- `/static/xterm.js`、`/static/xterm.css`、`/static/xterm-addon-fit.js`：打进二进制的终端库。xterm.js 是 MIT，许可见 `internal/web/static/xterm.LICENSE`。运行时不跑 npm
 - `/admin/assets`：管理员登记资产
 - `/admin/credentials`：管理员登记凭据。列表不带秘密
 - `/admin/credentials/{id}`：管理员查看这一条凭据的明文

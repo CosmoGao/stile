@@ -1,0 +1,18 @@
+services:
+  stile:
+    build: .
+    image: ghcr.io/cosmoga/stile:latest
+    environment:
+      GUACD_ADDRESS: guacd:4822
+    ports:
+      - "8080:8080"
+    volumes:
+      - stile-data:/data
+    depends_on:
+      - guacd
+
+  guacd:
+    image: guacamole/guacd:1.4.0
+
+volumes:
+  stile-data:

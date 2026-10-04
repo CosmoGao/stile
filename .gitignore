@@ -1,0 +1,28 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/stile
+/bin/
+
+# Tests
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Dependencies and workspace
+vendor/
+go.work
+go.work.sum
+
+# Local data and env
+/data
+.env
+.env.*
+
+# Editor
+.idea/
+.vscode/

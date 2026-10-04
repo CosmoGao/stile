@@ -99,8 +99,8 @@ STILE_CONFIG=./config.example ./stile
 docker compose up --build
 ```
 
-这会在本机拉起两个容器。`stile` 用当前源码构建，并打上 `ghcr.io/cosmoga/stile:latest`。`guacd` 用外部镜像 `guacamole/guacd:1.4.0`，源码不在本仓库，也不进 Stile 镜像。这不是部署到某台宿主机。容器里的锁定次数和时长写在 `docker-compose.yml`，同样只是示例，不是产品规则。
+这会在本机拉起两个容器。`stile` 用当前源码构建，并打上 `ghcr.io/cosmogao/stile:latest`。`guacd` 用外部镜像 `guacamole/guacd:1.4.0`，源码不在本仓库，也不进 Stile 镜像。这不是部署到某台宿主机。容器里的锁定次数和时长写在 `docker-compose.yml`，同样只是示例，不是产品规则。
 
 ## 镜像
 
-推送到 `main` 时，GitHub Actions 把镜像发到 `ghcr.io/cosmoga/stile`，标签为 `latest` 和该次提交的 SHA。Pull request 只构建、不推送。这也只是发布镜像，不是部署到宿主机。
+推送到 `main` 时，GitHub Actions 把镜像发到 `ghcr.io/cosmogao/stile`，标签为 `latest` 和该次提交的 SHA。Pull request 只构建、不推送。这也只是发布镜像，不是部署到宿主机。

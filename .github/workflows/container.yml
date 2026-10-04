@@ -22,7 +22,7 @@ jobs:
 
       - name: Image name
         id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: echo "name=ghcr.io/cosmogao/stile" >> "$GITHUB_OUTPUT"
 
       - name: Log in to ghcr.io
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

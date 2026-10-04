@@ -54,10 +54,11 @@
   .muted { color: #5c584f; }
   .wrap.wide { max-width: 76rem; }
   #term { height: 28rem; width: 100%; }
+  #display { background: #111; min-height: 24rem; overflow: auto; }
 </style>
 </head>
 <body>
-<div class="wrap{{if .Terminal}} wide{{end}}">
+<div class="wrap{{if or .Terminal .Desktop}} wide{{end}}">
 {{template "header" .}}
 {{end}}
 
@@ -384,7 +385,7 @@
 <main>
 {{if .User.Admin}}
 <h1>全部资产</h1>
-<p class="muted">这里列出全部资产，是为了管理。没有授权的仍然打不开。RDP 还不连接，也不连接 guacd。</p>
+<p class="muted">这里列出全部资产，是为了管理。没有授权的仍然打不开。打开 RDP 也要有授权，浏览器不直连 guacd。</p>
 {{else}}
 <h1>已授权的资产</h1>
 <p class="muted">只包括直接授给自己的，以及授给自己所在组的。没授权的不在这里。</p>
@@ -415,7 +416,7 @@
 {{define "open"}}
 {{template "docstart" .}}
 <main>
-<h1>{{if .Terminal}}{{.Open.Name}}{{else}}打开{{end}}</h1>
+<h1>{{if or .Terminal .Desktop}}{{.Open.Name}}{{else}}打开{{end}}</h1>
 {{template "alerts" .}}
 {{if .Terminal}}
 <p class="muted">{{.Open.Host}}:{{.Open.Port}}</p>
@@ -453,6 +454,41 @@
     fit.fit();
     sendSize();
   });
+})();
+</script>
+{{else if .Desktop}}
+<p class="muted">{{.Open.Host}}:{{.Open.Port}}。画面经这个站点连接，浏览器不直连 guacd。</p>
+<div id="display" data-asset-id="{{.Open.ID}}" data-protocol="{{.Open.Protocol}}" data-host="{{.Open.Host}}" data-port="{{.Open.Port}}"></div>
+<p id="rdp-note" class="muted"></p>
+<script src="/static/guacamole-common.js"></script>
+<script>
+(function () {
+  var el = document.getElementById("display");
+  var id = el.getAttribute("data-asset-id");
+  var pixel = window.devicePixelRatio || 1;
+  var width = Math.max(1, Math.floor(el.clientWidth * pixel)) || 1024;
+  var height = Math.max(1, Math.floor(480 * pixel));
+  var dpi = Math.max(1, Math.floor(96 * pixel));
+  var tunnel = new Guacamole.WebSocketTunnel("/assets/" + id + "/rdp");
+  var client = new Guacamole.Client(tunnel);
+  el.appendChild(client.getDisplay().getElement());
+  var mouse = new Guacamole.Mouse(client.getDisplay().getElement());
+  mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (state) {
+    client.sendMouseState(state);
+  };
+  var keyboard = new Guacamole.Keyboard(document);
+  keyboard.onkeydown = function (keysym) { client.sendKeyEvent(1, keysym); };
+  keyboard.onkeyup = function (keysym) { client.sendKeyEvent(0, keysym); };
+  var q = "GUAC_WIDTH=" + width + "&GUAC_HEIGHT=" + height + "&GUAC_DPI=" + dpi;
+  try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) q += "&GUAC_TIMEZONE=" + encodeURIComponent(tz);
+  } catch (e) {}
+  client.onerror = function () {
+    var note = document.getElementById("rdp-note");
+    if (note) note.textContent = "画面中断";
+  };
+  client.connect(q);
 })();
 </script>
 {{else if .Open}}

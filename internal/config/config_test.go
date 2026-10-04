@@ -18,6 +18,7 @@ func clearEnv(t *testing.T) {
 		"STILE_SESSION_TTL",
 		"STILE_LOCKOUT_FAILURES",
 		"STILE_LOCKOUT_DURATION",
+		"GUACD_ADDRESS",
 	} {
 		t.Setenv(k, "")
 	}
@@ -151,4 +152,30 @@ func stringsJoin(lines []string) string {
 		out += line
 	}
 	return out
+}
+
+func TestGuacdAddressOptional(t *testing.T) {
+	clearEnv(t)
+	dir := t.TempDir()
+	t.Setenv("STILE_LISTEN", "127.0.0.1:9")
+	t.Setenv("STILE_DATABASE", filepath.Join(dir, "a.db"))
+	t.Setenv("STILE_MASTER_KEY", filepath.Join(dir, "a.key"))
+	t.Setenv("STILE_SESSION_TTL", "2h")
+	t.Setenv("STILE_LOCKOUT_FAILURES", "2")
+	t.Setenv("STILE_LOCKOUT_DURATION", "30s")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GuacdAddress != "" {
+		t.Fatalf("guacd = %q", cfg.GuacdAddress)
+	}
+	t.Setenv("GUACD_ADDRESS", "127.0.0.1:4822")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GuacdAddress != "127.0.0.1:4822" {
+		t.Fatalf("guacd = %q", cfg.GuacdAddress)
+	}
 }

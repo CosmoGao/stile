@@ -92,9 +92,8 @@ func userAssetView(a asset.UserAsset) viewAsset {
 	}
 }
 
-// assetOpen checks authorization before showing an SSH terminal.
+// assetOpen checks authorization before showing an SSH terminal or an RDP display.
 // A failed check does not decrypt a credential and does not dial.
-// RDP is still not connected and does not use guacd.
 func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
@@ -108,7 +107,7 @@ func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 	pub, err := s.assets.GetUser(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, asset.ErrNotFound) {
-			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil, false)
+			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil, false, false)
 			return
 		}
 		log.Printf("open asset: %v", err)
@@ -123,13 +122,13 @@ func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	if !allowed {
 		// Do not echo the asset. No credential is decrypted and nothing is dialed.
-		s.renderOpen(w, r, u, http.StatusForbidden, openDenied, nil, false)
+		s.renderOpen(w, r, u, http.StatusForbidden, openDenied, nil, false, false)
 		return
 	}
 	full, err := s.assets.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, asset.ErrNotFound) {
-			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil, false)
+			s.renderOpen(w, r, u, http.StatusNotFound, "资产不存在", nil, false, false)
 			return
 		}
 		log.Printf("open asset: %v", err)
@@ -137,25 +136,29 @@ func (s *Server) assetOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := userAssetView(pub)
+	if full.Protocol == asset.ProtocolRDP {
+		s.openRDPPage(w, r, u, id)
+		return
+	}
 	if full.Protocol != asset.ProtocolSSH {
-		s.renderOpen(w, r, u, http.StatusOK, "这一段不打开 RDP，也不连接 guacd。", &view, false)
+		s.renderOpen(w, r, u, http.StatusForbidden, "协议不对，不连接", &view, false, false)
 		return
 	}
 	if full.CredentialID == "" {
-		s.renderOpen(w, r, u, http.StatusConflict, "未绑定凭据，打不开", &view, false)
+		s.renderOpen(w, r, u, http.StatusConflict, "未绑定凭据，打不开", &view, false, false)
 		return
 	}
 	if full.HostKeyFingerprint == "" {
-		s.renderOpen(w, r, u, http.StatusConflict, "还没有登记主机密钥指纹，不连接", &view, false)
+		s.renderOpen(w, r, u, http.StatusConflict, "还没有登记主机密钥指纹，不连接", &view, false, false)
 		return
 	}
-	s.renderOpen(w, r, u, http.StatusOK, "", &view, true)
+	s.renderOpen(w, r, u, http.StatusOK, "", &view, true, false)
 }
 
-func (s *Server) renderOpen(w http.ResponseWriter, r *http.Request, u identity.User, status int, msg string, item *viewAsset, terminal bool) {
+func (s *Server) renderOpen(w http.ResponseWriter, r *http.Request, u identity.User, status int, msg string, item *viewAsset, terminal, desktop bool) {
 	vu := s.view(u, u.ID)
 	title := "打开"
-	if terminal && item != nil {
+	if (terminal || desktop) && item != nil {
 		title = item.Name
 	}
 	s.render(w, status, "open", page{
@@ -165,6 +168,7 @@ func (s *Server) renderOpen(w http.ResponseWriter, r *http.Request, u identity.U
 		User:     &vu,
 		Open:     item,
 		Terminal: terminal,
+		Desktop:  desktop,
 	})
 }
 

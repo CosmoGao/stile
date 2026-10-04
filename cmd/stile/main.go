@@ -4,22 +4,35 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/CosmoGao/stile/internal/config"
+	"github.com/CosmoGao/stile/internal/store"
+	"github.com/CosmoGao/stile/internal/web"
 )
 
 func main() {
-	addr := os.Getenv("STILE_ADDR")
-	if addr == "" {
-		addr = ":8080"
+	if len(os.Args) > 1 {
+		log.Fatal("stile has no subcommands; set STILE_CONFIG or the STILE_* environment variables")
 	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-
-	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+	key, err := config.LoadOrCreateMasterKey(cfg.MasterKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, err := store.Open(cfg.Database)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	srv, err := web.New(cfg, db, key)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("listening on %s", cfg.Listen)
+	if err := http.ListenAndServe(cfg.Listen, srv.Handler()); err != nil {
 		log.Fatal(err)
 	}
 }

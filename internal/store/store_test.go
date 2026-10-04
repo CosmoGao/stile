@@ -36,19 +36,27 @@ func TestMigrateOnceAndForeignKeys(t *testing.T) {
 	for _, n := range names {
 		got[n] = true
 	}
-	for _, want := range []string{"users", "login_tokens", "schema_migrations"} {
+	for _, want := range []string{"users", "login_tokens", "schema_migrations", "credentials", "assets"} {
 		if !got[want] {
 			t.Fatalf("missing table %s in %v", want, names)
 		}
 	}
 	for _, n := range names {
-		if n != "users" && n != "login_tokens" && n != "schema_migrations" {
+		switch n {
+		case "users", "login_tokens", "schema_migrations", "credentials", "assets":
+		default:
 			t.Fatalf("unexpected table %s", n)
 		}
 	}
 
 	if _, err := db.ExecContext(ctx, `INSERT INTO login_tokens (id, user_id, token_hash, expires_at, created_at) VALUES ('t', 'missing', 'h', 'e', 'c')`); err == nil {
 		t.Fatal("foreign key did not reject a token without a user")
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO assets (id, name, protocol, host, port, credential_id, created_at, updated_at) VALUES ('asset-1', 'n', 'rdp', '192.0.2.1', 3389, 'missing-cred', 't', 't')`); err == nil {
+		t.Fatal("foreign key did not reject an asset credential")
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO assets (id, name, protocol, host, port, created_at, updated_at) VALUES ('asset-1', 'n', 'rdp', '192.0.2.1', 3389, 't', 't')`); err != nil {
+		t.Fatal(err)
 	}
 
 	db.Close()
@@ -61,8 +69,8 @@ func TestMigrateOnceAndForeignKeys(t *testing.T) {
 	if err := db2.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Fatalf("migrations applied %d times", n)
+	if n != 2 {
+		t.Fatalf("migrations applied %d times, want 2", n)
 	}
 	_ = sql.ErrNoRows
 }

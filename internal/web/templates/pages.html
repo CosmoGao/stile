@@ -1,0 +1,206 @@
+{{define "header"}}
+<header>
+  <a class="brand" href="/">Stile</a>
+  {{if .User}}
+  <div class="who">{{.User.Username}}</div>
+  <nav>
+    <a href="/account/totp">二次验证</a>
+    {{if .User.Admin}}<a href="/admin/users">用户</a>{{end}}
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit">登出</button>
+    </form>
+  </nav>
+  {{end}}
+</header>
+{{end}}
+
+{{define "alerts"}}
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}
+{{end}}
+
+{{define "docstart"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Stile</title>
+<style>
+  body { margin: 0; font: 16px/1.5 "Segoe UI", "Noto Sans SC", sans-serif; color: #1b1b1b; background: #f6f5f3; }
+  .wrap { max-width: 52rem; margin: 0 auto; padding: 1.5rem; }
+  header { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: center; margin-bottom: 1.5rem; }
+  .brand { font-weight: 700; color: inherit; text-decoration: none; }
+  nav { display: flex; gap: 0.75rem; align-items: center; margin-left: auto; }
+  nav form { margin: 0; }
+  h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+  label { display: block; margin: 0.9rem 0 0.25rem; }
+  input { width: min(100%, 24rem); padding: 0.45rem 0.5rem; border: 1px solid #b9b4ac; border-radius: 4px; background: #fff; }
+  button { margin-top: 0.9rem; padding: 0.35rem 0.8rem; border: 1px solid #2c3a33; border-radius: 4px; background: #2c3a33; color: #fff; cursor: pointer; }
+  nav button { margin-top: 0; }
+  .error { color: #8a1f11; }
+  .notice { color: #1d4d32; }
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid #e4e0d8; vertical-align: top; }
+  .inline { display: inline; }
+  .inline button { margin: 0.15rem 0.3rem 0.15rem 0; background: #fff; color: #1b1b1b; }
+  code { word-break: break-all; }
+  .muted { color: #5c584f; }
+</style>
+</head>
+<body>
+<div class="wrap">
+{{template "header" .}}
+{{end}}
+
+{{define "docend"}}
+</div>
+</body>
+</html>
+{{end}}
+
+{{define "setup"}}
+{{template "docstart" .}}
+<main>
+<h1>创建第一个管理员</h1>
+<p>库里还没有用户。创建完成后，这个入口会关闭，没有公开注册。</p>
+{{template "alerts" .}}
+<form method="post" action="/setup">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="username">用户名</label>
+  <input id="username" name="username" autocomplete="username" required>
+  <label for="password">口令</label>
+  <input id="password" name="password" type="password" autocomplete="new-password" required>
+  <button type="submit">创建管理员</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "login"}}
+{{template "docstart" .}}
+<main>
+<h1>登录</h1>
+{{template "alerts" .}}
+<form method="post" action="/login">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="username">用户名</label>
+  <input id="username" name="username" autocomplete="username" required>
+  <label for="password">口令</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <label for="code">验证码</label>
+  <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code">
+  <p class="muted">没有启用二次验证就留空。失败次数和锁定时长只来自配置，页面不写死。</p>
+  <button type="submit">登录</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "home"}}
+{{template "docstart" .}}
+<main>
+<h1>首页</h1>
+{{template "alerts" .}}
+<p>已登录：{{.User.Username}}</p>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "users"}}
+{{template "docstart" .}}
+<main>
+<h1>用户</h1>
+<p class="muted">停用或锁定会使该用户已有的登录凭证失效。锁定次数和时长只来自配置。</p>
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>用户名</th><th>角色</th><th>状态</th><th>锁定</th><th>二次验证</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Users}}
+    <tr data-username="{{.Username}}" data-role="{{if .Admin}}admin{{else}}user{{end}}" data-id="{{.ID}}">
+      <td>{{.Username}}</td>
+      <td>{{if .Admin}}管理员{{else}}普通用户{{end}}</td>
+      <td>{{if .Disabled}}已停用{{else}}正常{{end}}</td>
+      <td>{{if .Locked}}锁定至 {{.LockedUntil}}{{else}}未锁定{{end}}</td>
+      <td>{{if .TOTPEnabled}}已启用{{else if .TOTPPending}}未完成{{else}}未启用{{end}}</td>
+      <td>
+        {{if and (not .Disabled) (not .Self)}}
+        <form class="inline" method="post" action="/admin/users/{{.ID}}/disable">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">停用</button>
+        </form>
+        {{end}}
+        {{if .Locked}}
+        <form class="inline" method="post" action="/admin/users/{{.ID}}/clear-lock">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">清除锁定</button>
+        </form>
+        {{end}}
+        {{if or .TOTPEnabled .TOTPPending}}
+        <form class="inline" method="post" action="/admin/users/{{.ID}}/clear-totp">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">关闭二次验证</button>
+        </form>
+        {{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>创建普通用户</h2>
+<form method="post" action="/admin/users">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="username">用户名</label>
+  <input id="username" name="username" autocomplete="off" required>
+  <label for="password">口令</label>
+  <input id="password" name="password" type="password" autocomplete="new-password" required>
+  <button type="submit">创建</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "totp"}}
+{{template "docstart" .}}
+<main>
+<h1>二次验证</h1>
+{{template "alerts" .}}
+{{if .TOTPEnabled}}
+<p>已启用。种子不会再次显示。验证器丢失时，由管理员关闭二次验证并删除种子。</p>
+{{else}}
+<p class="muted">这是可选项。不启用也可以登录。</p>
+{{if .TOTPSecret}}
+<p>把种子填进验证器。这是唯一一次显示，离开后不再显示。</p>
+<p><code id="totp-secret">{{.TOTPSecret}}</code></p>
+<p><a href="{{.TOTPURI}}">otpauth 链接</a></p>
+{{else if .TOTPPending}}
+<p>种子已经显示过，这里不再显示。输入验证器上的当前验证码完成启用，或重新生成。</p>
+{{end}}
+{{if or .TOTPSecret .TOTPPending}}
+<form method="post" action="/account/totp/confirm">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="code">当前验证码</label>
+  <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required>
+  <button type="submit">确认启用</button>
+</form>
+<form method="post" action="/account/totp/start">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <button type="submit">重新生成种子</button>
+</form>
+<form method="post" action="/account/totp/cancel">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <button type="submit">取消</button>
+</form>
+{{else}}
+<form method="post" action="/account/totp/start">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <button type="submit">开始设置</button>
+</form>
+{{end}}
+{{end}}
+</main>
+{{template "docend" .}}
+{{end}}

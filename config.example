@@ -1,0 +1,16 @@
+# Stile 配置示例
+# 登录凭证有效期、失败锁定次数、锁定时长都还没有产品定值。
+# 下面出现的数字只是示例，不是产品规则。改配置即可，不要写进代码。
+
+listen 127.0.0.1:8080
+database /var/lib/Stile/Stile.db
+master_key /etc/Stile/master.key
+
+# 示例，数值未定
+session_ttl 8h
+
+# 示例，数值未定
+lockout_failures 4
+
+# 示例，数值未定
+lockout_duration 10m

@@ -4,6 +4,14 @@ services:
     image: ghcr.io/cosmoga/stile:latest
     environment:
       GUACD_ADDRESS: guacd:4822
+      STILE_LISTEN: "0.0.0.0:8080"
+      STILE_DATABASE: /data/Stile.db
+      STILE_MASTER_KEY: /data/master.key
+      # 登录凭证有效期、失败锁定次数和锁定时长都还没有定。
+      # 下面三个值只是示例，不是产品规则。
+      STILE_SESSION_TTL: "12h"
+      STILE_LOCKOUT_FAILURES: "4"
+      STILE_LOCKOUT_DURATION: "20m"
     ports:
       - "8080:8080"
     volumes:

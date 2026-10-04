@@ -15,8 +15,10 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/CosmoGao/stile/internal/asset"
 	"github.com/CosmoGao/stile/internal/auth"
 	"github.com/CosmoGao/stile/internal/config"
+	"github.com/CosmoGao/stile/internal/credential"
 	"github.com/CosmoGao/stile/internal/identity"
 )
 
@@ -31,11 +33,13 @@ const (
 var idPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type Server struct {
-	cfg  config.Config
-	db   *sql.DB
-	auth *auth.Service
-	tmpl *template.Template
-	now  func() time.Time
+	cfg    config.Config
+	db     *sql.DB
+	auth   *auth.Service
+	creds  *credential.Service
+	assets *asset.Service
+	tmpl   *template.Template
+	now    func() time.Time
 }
 
 type page struct {
@@ -45,6 +49,10 @@ type page struct {
 	CSRF        string
 	User        *viewUser
 	Users       []viewUser
+	Assets      []viewAsset
+	Credentials []viewCredential
+	Shown       *viewCredential
+	Secret      string
 	TOTPSecret  string
 	TOTPURI     string
 	TOTPEnabled bool
@@ -83,6 +91,8 @@ func New(cfg config.Config, db *sql.DB, key []byte) (*Server, error) {
 	s.auth = auth.New(db, key, cfg.SessionTTL, cfg.LockoutFailures, cfg.LockoutDuration, func() time.Time {
 		return s.now()
 	})
+	s.creds = credential.New(db, key, func() time.Time { return s.now() })
+	s.assets = asset.New(db, func() time.Time { return s.now() })
 	return s, nil
 }
 
@@ -111,6 +121,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/users/{id}/disable", s.usersDisable)
 	mux.HandleFunc("POST /admin/users/{id}/clear-lock", s.usersClearLock)
 	mux.HandleFunc("POST /admin/users/{id}/clear-totp", s.usersClearTOTP)
+	mux.HandleFunc("GET /admin/assets", s.assetsGet)
+	mux.HandleFunc("POST /admin/assets", s.assetsCreate)
+	mux.HandleFunc("POST /admin/assets/{id}/delete", s.assetsDelete)
+	mux.HandleFunc("POST /admin/assets/{id}", s.assetsUpdate)
+	mux.HandleFunc("GET /admin/credentials", s.credentialsGet)
+	mux.HandleFunc("POST /admin/credentials", s.credentialsCreate)
+	mux.HandleFunc("GET /admin/credentials/{id}", s.credentialsView)
+	mux.HandleFunc("POST /admin/credentials/{id}/delete", s.credentialsDelete)
+	mux.HandleFunc("POST /admin/credentials/{id}", s.credentialsReplace)
 	return mux
 }
 
@@ -287,6 +306,16 @@ func noticeText(r *http.Request) string {
 		return "已关闭二次验证"
 	case "totp-enabled":
 		return "已启用二次验证"
+	case "asset-saved":
+		return "已保存资产"
+	case "asset-deleted":
+		return "已删除资产"
+	case "credential-saved":
+		return "已保存凭据"
+	case "credential-replaced":
+		return "已替换凭据"
+	case "credential-deleted":
+		return "已删除凭据"
 	default:
 		return ""
 	}

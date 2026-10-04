@@ -5,7 +5,7 @@
   <div class="who">{{.User.Username}}</div>
   <nav>
     <a href="/account/totp">二次验证</a>
-    {{if .User.Admin}}<a href="/admin/users">用户</a>{{end}}
+    {{if .User.Admin}}<a href="/admin/assets">资产</a><a href="/admin/credentials">凭据</a><a href="/admin/users">用户</a>{{end}}
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button type="submit">登出</button>
@@ -45,7 +45,10 @@
   th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid #e4e0d8; vertical-align: top; }
   .inline { display: inline; }
   .inline button { margin: 0.15rem 0.3rem 0.15rem 0; background: #fff; color: #1b1b1b; }
-  code { word-break: break-all; }
+  code, pre { word-break: break-all; }
+  textarea, select { width: min(100%, 24rem); padding: 0.45rem 0.5rem; border: 1px solid #b9b4ac; border-radius: 4px; background: #fff; font: inherit; }
+  textarea { min-height: 7rem; width: min(100%, 36rem); }
+  pre { white-space: pre-wrap; background: #fff; padding: 0.6rem; border: 1px solid #e4e0d8; }
   .muted { color: #5c584f; }
 </style>
 </head>
@@ -104,6 +107,11 @@
 <h1>首页</h1>
 {{template "alerts" .}}
 <p>已登录：{{.User.Username}}</p>
+{{if .User.Admin}}
+<p class="muted">资产和凭据在管理页登记。这里不连接目标，也不打开会话。</p>
+{{else}}
+<p class="muted">还没有授权给你的资产。</p>
+{{end}}
 </main>
 {{template "docend" .}}
 {{end}}
@@ -201,6 +209,154 @@
 </form>
 {{end}}
 {{end}}
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "assets"}}
+{{template "docstart" .}}
+<main>
+<h1>资产</h1>
+<p class="muted">协议只有 SSH 和 RDP。端口留空时，SSH 用 22，RDP 用 3389。主机密钥指纹只保存填写的值，这里不连接目标，也不做密钥交换。资产上没有口令或私钥。</p>
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>名称</th><th>协议</th><th>地址</th><th>凭据</th><th>主机密钥指纹</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Assets}}
+  {{$asset := .}}
+    <tr data-asset-id="{{.ID}}" data-name="{{.Name}}" data-protocol="{{.Protocol}}" data-host="{{.Host}}" data-port="{{.Port}}" data-credential-id="{{.CredentialID}}" data-host-key="{{.HostKey}}">
+      <td>{{.Name}}</td>
+      <td>{{if eq .Protocol "rdp"}}RDP{{else}}SSH{{end}}</td>
+      <td>{{.Host}}:{{.Port}}</td>
+      <td>{{if .CredentialID}}{{.CredentialName}}{{else}}未绑定{{end}}</td>
+      <td>{{if .HostKey}}<code>{{.HostKey}}</code>{{else}}无{{end}}</td>
+      <td>
+        <form method="post" action="/admin/assets/{{.ID}}">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <input type="hidden" name="protocol" value="{{.Protocol}}">
+          <input type="hidden" name="host" value="{{.Host}}">
+          <input type="hidden" name="port" value="{{.Port}}">
+          <input type="hidden" name="ssh_host_key_fingerprint" value="{{.HostKey}}">
+          <label>凭据
+            <select name="credential_id">
+              <option value=""{{if not .CredentialID}} selected{{end}}>不绑定</option>
+              {{range $.Credentials}}
+              <option value="{{.ID}}"{{if eq $asset.CredentialID .ID}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </label>
+          <button type="submit">保存绑定</button>
+        </form>
+        <form class="inline" method="post" action="/admin/assets/{{.ID}}/delete">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">删除</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>登记资产</h2>
+<form method="post" action="/admin/assets">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="asset-name">名称</label>
+  <input id="asset-name" name="name" required>
+  <label for="asset-protocol">协议</label>
+  <select id="asset-protocol" name="protocol">
+    <option value="ssh">SSH</option>
+    <option value="rdp">RDP</option>
+  </select>
+  <label for="asset-host">主机名或 IP</label>
+  <input id="asset-host" name="host" required>
+  <label for="asset-port">端口</label>
+  <input id="asset-port" name="port" inputmode="numeric">
+  <label for="asset-credential">凭据</label>
+  <select id="asset-credential" name="credential_id">
+    <option value="">不绑定</option>
+    {{range .Credentials}}
+    <option value="{{.ID}}">{{.Name}}（{{.LoginName}}）</option>
+    {{end}}
+  </select>
+  <label for="asset-fingerprint">SSH 主机密钥指纹</label>
+  <input id="asset-fingerprint" name="ssh_host_key_fingerprint">
+  <button type="submit">登记</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "credentials"}}
+{{template "docstart" .}}
+<main>
+<h1>凭据</h1>
+<p class="muted">列表、创建和替换都不显示口令或私钥。要看明文，单独打开查看。查看不写登录日志。私钥如果自带口令，只在提交时解开，口令不会保存。仍被资产引用的凭据不能删除。</p>
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>名称</th><th>种类</th><th>登录名</th><th>公钥指纹</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Credentials}}
+    <tr data-credential-id="{{.ID}}" data-name="{{.Name}}" data-kind="{{.Kind}}" data-login-name="{{.LoginName}}" data-fingerprint="{{.Fingerprint}}">
+      <td>{{.Name}}</td>
+      <td>{{if eq .Kind "ssh_private_key"}}SSH 私钥{{else}}密码{{end}}</td>
+      <td>{{.LoginName}}</td>
+      <td>{{if .Fingerprint}}<code>{{.Fingerprint}}</code>{{else}}无{{end}}</td>
+      <td>
+        <a href="/admin/credentials/{{.ID}}">查看</a>
+        <form method="post" action="/admin/credentials/{{.ID}}">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="kind" value="{{.Kind}}">
+          <label>名称 <input name="name" value="{{.Name}}" required></label>
+          <label>登录名 <input name="login_name" value="{{.LoginName}}" required></label>
+          <label>新口令或私钥 <textarea name="secret" autocomplete="off" spellcheck="false"></textarea></label>
+          <label>私钥口令 <input name="key_passphrase" type="password" autocomplete="off"></label>
+          <button type="submit">替换</button>
+        </form>
+        <form class="inline" method="post" action="/admin/credentials/{{.ID}}/delete">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">删除</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>登记凭据</h2>
+<form method="post" action="/admin/credentials">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="cred-name">名称</label>
+  <input id="cred-name" name="name" required>
+  <label for="cred-kind">种类</label>
+  <select id="cred-kind" name="kind">
+    <option value="password">密码</option>
+    <option value="ssh_private_key">SSH 私钥</option>
+  </select>
+  <label for="cred-login">登录名</label>
+  <input id="cred-login" name="login_name" required>
+  <label for="cred-secret">口令或私钥</label>
+  <textarea id="cred-secret" name="secret" autocomplete="off" spellcheck="false"></textarea>
+  <label for="cred-passphrase">私钥口令</label>
+  <input id="cred-passphrase" name="key_passphrase" type="password" autocomplete="off">
+  <p class="muted">没有口令的私钥留空。提交之后，这一页的响应里不再出现口令或私钥。</p>
+  <button type="submit">登记</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "credential_view"}}
+{{template "docstart" .}}
+<main>
+<h1>查看凭据</h1>
+<p class="muted">只在这一页显示明文。离开后列表里不再出现。这次查看不写登录日志。</p>
+<p><a href="/admin/credentials">返回列表</a></p>
+{{template "alerts" .}}
+<p data-credential-id="{{.Shown.ID}}" data-kind="{{.Shown.Kind}}" data-login-name="{{.Shown.LoginName}}" data-fingerprint="{{.Shown.Fingerprint}}">{{.Shown.Name}}，登录名 {{.Shown.LoginName}}，{{if eq .Shown.Kind "ssh_private_key"}}SSH 私钥{{else}}密码{{end}}{{if .Shown.Fingerprint}}，指纹 <code>{{.Shown.Fingerprint}}</code>{{end}}</p>
+<pre id="credential-secret">{{.Secret}}</pre>
 </main>
 {{template "docend" .}}
 {{end}}

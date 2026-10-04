@@ -139,7 +139,10 @@ func TestWrongPasswordDoesNotLoginAndNoLoginLog(t *testing.T) {
 	for _, n := range names {
 		got[n] = true
 	}
-	allowed := map[string]bool{"users": true, "login_tokens": true, "schema_migrations": true}
+	allowed := map[string]bool{
+		"users": true, "login_tokens": true, "schema_migrations": true,
+		"credentials": true, "assets": true,
+	}
 	if len(got) != len(allowed) {
 		t.Fatalf("tables = %v", names)
 	}

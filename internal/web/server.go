@@ -19,6 +19,7 @@ import (
 	"github.com/CosmoGao/stile/internal/auth"
 	"github.com/CosmoGao/stile/internal/config"
 	"github.com/CosmoGao/stile/internal/credential"
+	"github.com/CosmoGao/stile/internal/grant"
 	"github.com/CosmoGao/stile/internal/identity"
 )
 
@@ -38,25 +39,32 @@ type Server struct {
 	auth   *auth.Service
 	creds  *credential.Service
 	assets *asset.Service
+	grants *grant.Service
 	tmpl   *template.Template
 	now    func() time.Time
 }
 
 type page struct {
-	Title       string
-	Error       string
-	Notice      string
-	CSRF        string
-	User        *viewUser
-	Users       []viewUser
-	Assets      []viewAsset
-	Credentials []viewCredential
-	Shown       *viewCredential
-	Secret      string
-	TOTPSecret  string
-	TOTPURI     string
-	TOTPEnabled bool
-	TOTPPending bool
+	Title          string
+	Error          string
+	Notice         string
+	CSRF           string
+	User           *viewUser
+	Users          []viewUser
+	Assets         []viewAsset
+	Credentials    []viewCredential
+	Groups         []viewGroup
+	Group          *viewGroup
+	Members        []viewMember
+	Grants         []viewGrant
+	Open           *viewAsset
+	ShowCredential bool
+	Shown          *viewCredential
+	Secret         string
+	TOTPSecret     string
+	TOTPURI        string
+	TOTPEnabled    bool
+	TOTPPending    bool
 }
 
 type viewUser struct {
@@ -93,6 +101,7 @@ func New(cfg config.Config, db *sql.DB, key []byte) (*Server, error) {
 	})
 	s.creds = credential.New(db, key, func() time.Time { return s.now() })
 	s.assets = asset.New(db, func() time.Time { return s.now() })
+	s.grants = grant.New(db, func() time.Time { return s.now() })
 	return s, nil
 }
 
@@ -121,6 +130,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/users/{id}/disable", s.usersDisable)
 	mux.HandleFunc("POST /admin/users/{id}/clear-lock", s.usersClearLock)
 	mux.HandleFunc("POST /admin/users/{id}/clear-totp", s.usersClearTOTP)
+	mux.HandleFunc("POST /admin/users/{id}/delete", s.usersDelete)
+	mux.HandleFunc("GET /admin/groups", s.groupsGet)
+	mux.HandleFunc("POST /admin/groups", s.groupsCreate)
+	mux.HandleFunc("POST /admin/groups/{id}/delete", s.groupsDelete)
+	mux.HandleFunc("GET /admin/groups/{id}", s.groupGet)
+	mux.HandleFunc("POST /admin/groups/{id}/members", s.groupAddMember)
+	mux.HandleFunc("POST /admin/groups/{id}/members/{userID}/delete", s.groupRemoveMember)
+	mux.HandleFunc("GET /admin/grants", s.grantsGet)
+	mux.HandleFunc("POST /admin/grants", s.grantsCreate)
+	mux.HandleFunc("POST /admin/grants/{id}/delete", s.grantsRevoke)
+	mux.HandleFunc("GET /assets", s.assetsVisible)
+	mux.HandleFunc("GET /assets/{id}/open", s.assetOpen)
 	mux.HandleFunc("GET /admin/assets", s.assetsGet)
 	mux.HandleFunc("POST /admin/assets", s.assetsCreate)
 	mux.HandleFunc("POST /admin/assets/{id}/delete", s.assetsDelete)
@@ -316,6 +337,20 @@ func noticeText(r *http.Request) string {
 		return "已替换凭据"
 	case "credential-deleted":
 		return "已删除凭据"
+	case "group-created":
+		return "已创建用户组"
+	case "group-deleted":
+		return "已删除用户组"
+	case "member-added":
+		return "已加入用户组"
+	case "member-removed":
+		return "已移出用户组"
+	case "grant-created":
+		return "已授权"
+	case "grant-revoked":
+		return "已取消授权"
+	case "user-deleted":
+		return "已删除用户"
 	default:
 		return ""
 	}

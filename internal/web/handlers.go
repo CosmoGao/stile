@@ -332,6 +332,39 @@ func (s *Server) usersClearTOTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) usersDelete(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if !s.postOK(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	if !validID(id) {
+		http.NotFound(w, r)
+		return
+	}
+	if id == u.ID {
+		s.renderUsers(w, r, http.StatusBadRequest, "不能删除当前登录的用户")
+		return
+	}
+	if err := identity.DeleteUser(r.Context(), s.db, id); err != nil {
+		if errors.Is(err, identity.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, identity.ErrLastAdmin) {
+			s.renderUsers(w, r, http.StatusBadRequest, "不能删除仅有的管理员")
+			return
+		}
+		log.Printf("delete user: %v", err)
+		http.Error(w, "内部错误", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/users?notice=user-deleted", http.StatusSeeOther)
+}
+
 func (s *Server) userAction(w http.ResponseWriter, r *http.Request, notice string, fn func(string) error) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return

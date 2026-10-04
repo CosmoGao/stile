@@ -4,8 +4,9 @@
   {{if .User}}
   <div class="who">{{.User.Username}}</div>
   <nav>
+    <a href="/assets">资产</a>
     <a href="/account/totp">二次验证</a>
-    {{if .User.Admin}}<a href="/admin/assets">资产</a><a href="/admin/credentials">凭据</a><a href="/admin/users">用户</a>{{end}}
+    {{if .User.Admin}}<a href="/admin/assets">管理资产</a><a href="/admin/credentials">凭据</a><a href="/admin/grants">授权</a><a href="/admin/groups">用户组</a><a href="/admin/users">用户</a>{{end}}
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button type="submit">登出</button>
@@ -108,9 +109,11 @@
 {{template "alerts" .}}
 <p>已登录：{{.User.Username}}</p>
 {{if .User.Admin}}
-<p class="muted">资产和凭据在管理页登记。这里不连接目标，也不打开会话。</p>
+<p><a href="/assets">全部资产</a></p>
+<p class="muted">管理资产、凭据、用户组和授权在对应页面。看得到全部资产不等于可以打开。这里不连接目标，也不打开会话。</p>
 {{else}}
-<p class="muted">还没有授权给你的资产。</p>
+<p><a href="/assets">已授权的资产</a></p>
+<p class="muted">只能看到直接授给自己的，以及授给自己所在组的。这里不连接目标。</p>
 {{end}}
 </main>
 {{template "docend" .}}
@@ -120,7 +123,7 @@
 {{template "docstart" .}}
 <main>
 <h1>用户</h1>
-<p class="muted">停用或锁定会使该用户已有的登录凭证失效。锁定次数和时长只来自配置。</p>
+<p class="muted">停用或锁定会使该用户已有的登录凭证失效。锁定次数和时长只来自配置。删除用户时，成员关系和授给该用户的授权一起删除。停用不会删掉这些。</p>
 {{template "alerts" .}}
 <table>
   <thead>
@@ -151,6 +154,12 @@
         <form class="inline" method="post" action="/admin/users/{{.ID}}/clear-totp">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <button type="submit">关闭二次验证</button>
+        </form>
+        {{end}}
+        {{if not .Self}}
+        <form class="inline" method="post" action="/admin/users/{{.ID}}/delete">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">删除</button>
         </form>
         {{end}}
       </td>
@@ -357,6 +366,192 @@
 {{template "alerts" .}}
 <p data-credential-id="{{.Shown.ID}}" data-kind="{{.Shown.Kind}}" data-login-name="{{.Shown.LoginName}}" data-fingerprint="{{.Shown.Fingerprint}}">{{.Shown.Name}}，登录名 {{.Shown.LoginName}}，{{if eq .Shown.Kind "ssh_private_key"}}SSH 私钥{{else}}密码{{end}}{{if .Shown.Fingerprint}}，指纹 <code>{{.Shown.Fingerprint}}</code>{{end}}</p>
 <pre id="credential-secret">{{.Secret}}</pre>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "visible_assets"}}
+{{template "docstart" .}}
+<main>
+{{if .User.Admin}}
+<h1>全部资产</h1>
+<p class="muted">这里列出全部资产，是为了管理。没有授权的仍然打不开。这一段不连接目标机，也不连接 guacd。</p>
+{{else}}
+<h1>已授权的资产</h1>
+<p class="muted">只包括直接授给自己的，以及授给自己所在组的。没授权的不在这里。</p>
+{{end}}
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>名称</th><th>协议</th><th>地址</th>{{if .ShowCredential}}<th>凭据</th>{{end}}<th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Assets}}
+    <tr class="visible-asset" data-asset-id="{{.ID}}" data-name="{{.Name}}" data-protocol="{{.Protocol}}" data-host="{{.Host}}" data-port="{{.Port}}"{{if $.ShowCredential}} data-credential-id="{{.CredentialID}}"{{end}}>
+      <td>{{.Name}}</td>
+      <td>{{if eq .Protocol "rdp"}}RDP{{else}}SSH{{end}}</td>
+      <td>{{.Host}}:{{.Port}}</td>
+      {{if $.ShowCredential}}<td>{{if .CredentialID}}{{.CredentialName}}{{else}}未绑定{{end}}</td>{{end}}
+      <td><a href="/assets/{{.ID}}/open">打开</a></td>
+    </tr>
+  {{else}}
+    <tr><td colspan="4">没有可列出的资产</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "open"}}
+{{template "docstart" .}}
+<main>
+<h1>打开</h1>
+{{template "alerts" .}}
+{{if .Open}}
+<p id="open-result">已授权。这一段不连接目标机，也不连接 guacd。</p>
+<p data-asset-id="{{.Open.ID}}" data-name="{{.Open.Name}}" data-protocol="{{.Open.Protocol}}" data-host="{{.Open.Host}}" data-port="{{.Open.Port}}">{{.Open.Name}}，{{.Open.Host}}:{{.Open.Port}}</p>
+{{end}}
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "groups"}}
+{{template "docstart" .}}
+<main>
+<h1>用户组</h1>
+<p class="muted">删除用户组时，成员关系和授给这个组的授权一起删除。删除用户时，成员关系也会删除。</p>
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>名称</th><th>成员</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Groups}}
+    <tr data-group-id="{{.ID}}" data-name="{{.Name}}" data-members="{{.Members}}">
+      <td><a href="/admin/groups/{{.ID}}">{{.Name}}</a></td>
+      <td>{{.Members}}</td>
+      <td>
+        <form class="inline" method="post" action="/admin/groups/{{.ID}}/delete">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">删除</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>创建用户组</h2>
+<form method="post" action="/admin/groups">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="group-name">名称</label>
+  <input id="group-name" name="name" required>
+  <button type="submit">创建</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "group"}}
+{{template "docstart" .}}
+<main>
+<h1>{{.Group.Name}}</h1>
+<p><a href="/admin/groups">返回用户组</a></p>
+<p class="muted">移出成员不会删除用户。删除这个组会删掉授给它的授权。</p>
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>用户名</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Members}}
+    <tr data-user-id="{{.UserID}}" data-username="{{.Username}}">
+      <td>{{.Username}}</td>
+      <td>
+        <form class="inline" method="post" action="/admin/groups/{{$.Group.ID}}/members/{{.UserID}}/delete">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">移出</button>
+        </form>
+      </td>
+    </tr>
+  {{else}}
+    <tr><td colspan="2">还没有成员</td></tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>加入成员</h2>
+<form method="post" action="/admin/groups/{{.Group.ID}}/members">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="member-user">用户</label>
+  <select id="member-user" name="user_id">
+    {{range .Users}}
+    <option value="{{.ID}}">{{.Username}}</option>
+    {{end}}
+  </select>
+  <button type="submit">加入</button>
+</form>
+<form method="post" action="/admin/groups/{{.Group.ID}}/delete">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <button type="submit">删除用户组</button>
+</form>
+</main>
+{{template "docend" .}}
+{{end}}
+
+{{define "grants"}}
+{{template "docstart" .}}
+<main>
+<h1>授权</h1>
+<p class="muted">把资产授给一个用户或一个用户组。同一资产、同一主体只保留一行。没有上传、下载、编辑、删除、重命名或复制粘贴这些细项。授权只回答谁能打开哪台资产。</p>
+{{template "alerts" .}}
+<table>
+  <thead>
+    <tr><th>资产</th><th>主体</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .Grants}}
+    <tr data-grant-id="{{.ID}}" data-asset-id="{{.AssetID}}" data-asset-name="{{.AssetName}}" data-subject-type="{{.SubjectType}}" data-subject-id="{{.SubjectID}}" data-subject-name="{{.SubjectName}}">
+      <td>{{.AssetName}}</td>
+      <td>{{if eq .SubjectType "group"}}用户组{{else}}用户{{end}} {{.SubjectName}}</td>
+      <td>
+        <form class="inline" method="post" action="/admin/grants/{{.ID}}/delete">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit">取消</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>添加授权</h2>
+<form method="post" action="/admin/grants">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="grant-asset">资产</label>
+  <select id="grant-asset" name="asset_id">
+    {{range .Assets}}
+    <option value="{{.ID}}">{{.Name}}</option>
+    {{end}}
+  </select>
+  <label for="grant-subject-type">主体</label>
+  <select id="grant-subject-type" name="subject_type">
+    <option value="user">用户</option>
+    <option value="group">用户组</option>
+  </select>
+  <label for="grant-user">用户</label>
+  <select id="grant-user" name="user_id">
+    {{range .Users}}
+    <option value="{{.ID}}">{{.Username}}</option>
+    {{end}}
+  </select>
+  <label for="grant-group">用户组</label>
+  <select id="grant-group" name="group_id">
+    {{range .Groups}}
+    <option value="{{.ID}}">{{.Name}}</option>
+    {{end}}
+  </select>
+  <p class="muted">主体选用户时用上面的用户，选用户组时用上面的用户组。</p>
+  <button type="submit">授权</button>
+</form>
 </main>
 {{template "docend" .}}
 {{end}}

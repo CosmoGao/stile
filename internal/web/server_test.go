@@ -142,6 +142,7 @@ func TestWrongPasswordDoesNotLoginAndNoLoginLog(t *testing.T) {
 	allowed := map[string]bool{
 		"users": true, "login_tokens": true, "schema_migrations": true,
 		"credentials": true, "assets": true,
+		"user_groups": true, "group_members": true, "grants": true,
 	}
 	if len(got) != len(allowed) {
 		t.Fatalf("tables = %v", names)

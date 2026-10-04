@@ -1,3 +1,6 @@
+# stile 的镜像名是 ghcr.io/cosmoga/stile:latest。
+# 本机 `docker compose up --build` 用当前源码构建并打上这个标签。
+# guacd 用外部镜像 guacamole/guacd:1.4.0，源码不在本仓库，也不进 Stile 镜像。
 services:
   stile:
     build: .

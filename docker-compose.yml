@@ -1,6 +1,6 @@
 # stile 的镜像名是 ghcr.io/cosmogao/stile:latest。
 # 本机 `docker compose up --build` 用当前源码构建并打上这个标签。
-# guacd 使用 ghcr.io/cosmogao/guacd:1.4.0。这个镜像由工作流用 Apache Guacamole Server 上游 1.4.0 源码原样构建，源码不在本仓库，也没有修改。
+# guacd 使用 ghcr.io/cosmogao/guacd:1.4.0。这个镜像由工作流用 Apache Guacamole Server 上游 1.4.0 源码构建，源码不在本仓库。构建前只改 apt 源地址，不改 guacd 源码。
 services:
   stile:
     build: .

@@ -43,13 +43,20 @@ jobs:
             ${{ steps.image.outputs.name }}:${{ github.sha }}
 
       # Apache Guacamole Server tag 1.4.0 (annotated tag; commit be9041fefd9c1f7c647845aa0709caedcb54e812).
-      # Dockerfile is at the repository root. The stages are "builder" and an unnamed final stage;
-      # there is no target named guacd, so this step does not set target. The final stage is the guacd image.
-      # Upstream source is used as-is and is not copied into this repository.
+      # Source is cloned here and is not committed. The Dockerfile apt lines are rewritten to
+      # archive.debian.org because Debian 10 is no longer on deb.debian.org. Guacamole source is not changed.
+      # There is no build target named guacd; the final stage is the image.
+      - name: Prepare guacd 1.4.0 source
+        run: |
+          git clone --depth 1 --branch 1.4.0 https://github.com/apache/guacamole-server.git guacd-src
+          test "$(git -C guacd-src rev-parse HEAD)" = "be9041fefd9c1f7c647845aa0709caedcb54e812"
+          python3 docker/prepare-guacd-dockerfile.py guacd-src/Dockerfile
+
       - name: Build and push guacd
         uses: docker/build-push-action@v7
         with:
-          context: https://github.com/apache/guacamole-server.git#1.4.0
+          context: guacd-src
+          file: guacd-src/Dockerfile
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: |
             ghcr.io/cosmogao/guacd:1.4.0

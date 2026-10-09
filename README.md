@@ -43,7 +43,7 @@ Stile（Secure Terminals in a Lightweight Enclosure）是一个开源、轻量�
 
 命令行、AI、MCP、登录日志、命令记录、会话录像、会话列表、强制断开、空闲超时、文件盘、磁盘和文件传输、批量命令、Kubernetes、Telnet、VNC、LDAP、租户。授权没有上传、下载、编辑、删除、重命名、复制粘贴这些细项。不重写 guacd。
 
-`guacd` 1.4.0 使用 `ghcr.io/cosmogao/guacd:1.4.0`。这个镜像由工作流从 Apache Guacamole Server 上游 1.4.0 源码构建。源码不进本仓库，也不打进 Stile 镜像。Debian 10 的软件源已经从 deb.debian.org 下线，构建前只把 apt 改到 archive.debian.org，不改 guacd 源码。网页 RDP 由这个进程连接它。网页 SSH 不经过它。guacd 没启动时，网页 SSH 仍然可以打开。浏览器不直连 guacd。
+`guacd` 1.4.0 使用 `ghcr.io/cosmogao/stile-guacd:1.4.0`。这个镜像由工作流从 Apache Guacamole Server 上游 1.4.0 源码构建。源码不进本仓库，也不打进 Stile 镜像。Debian 10 的软件源已经从 deb.debian.org 下线，构建前只把 apt 改到 archive.debian.org，不改 guacd 源码。网页 RDP 由这个进程连接它。网页 SSH 不经过它。guacd 没启动时，网页 SSH 仍然可以打开。浏览器不直连 guacd。
 
 ## 配置
 
@@ -99,8 +99,8 @@ STILE_CONFIG=./config.example ./stile
 docker compose up --build
 ```
 
-这会在本机拉起两个容器。`stile` 用当前源码构建，并打上 `ghcr.io/cosmogao/stile:latest`。`guacd` 使用 `ghcr.io/cosmogao/guacd:1.4.0`。这个镜像由工作流从上游 1.4.0 源码构建，源码不在本仓库，也不进 Stile 镜像。构建前只改 apt 源地址，不改 guacd 源码。这不是部署到某台宿主机。容器里的锁定次数和时长写在 `docker-compose.yml`，同样只是示例，不是产品规则。
+这会在本机拉起两个容器。`stile` 用当前源码构建，并打上 `ghcr.io/cosmogao/stile:latest`。`guacd` 使用 `ghcr.io/cosmogao/stile-guacd:1.4.0`。这个镜像由工作流从上游 1.4.0 源码构建，源码不在本仓库，也不进 Stile 镜像。构建前只改 apt 源地址，不改 guacd 源码。这不是部署到某台宿主机。容器里的锁定次数和时长写在 `docker-compose.yml`，同样只是示例，不是产品规则。
 
 ## 镜像
 
-推送到 `main` 时，GitHub Actions 把 Stile 镜像发到 `ghcr.io/cosmogao/stile`，标签为 `latest` 和该次提交的 SHA。同一工作流用 Apache Guacamole Server 上游标签 1.4.0 的源码构建 `ghcr.io/cosmogao/guacd`，标签为 `1.4.0` 和该次 Stile 提交的 SHA。源码不进本仓库。构建前只把已经下线的 Debian 10 软件源改到 archive.debian.org，不改 guacd 源码。Pull request 只构建、不推送。这也只是发布镜像，不是部署到宿主机。
+推送到 `main` 时，GitHub Actions 把 Stile 镜像发到 `ghcr.io/cosmogao/stile`，标签为 `latest` 和该次提交的 SHA。同一工作流用 Apache Guacamole Server 上游标签 1.4.0 的源码构建 `ghcr.io/cosmogao/stile-guacd`，标签为 `1.4.0` 和该次 Stile 提交的 SHA。源码不进本仓库。构建前只把已经下线的 Debian 10 软件源改到 archive.debian.org，不改 guacd 源码。`ghcr.io/cosmogao/guacd` 这个包属于 next-terminal 仓库，本仓库的工作流没有写入权限，所以用单独的包名。Pull request 只构建、不推送。这也只是发布镜像，不是部署到宿主机。

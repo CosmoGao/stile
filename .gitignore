@@ -26,3 +26,6 @@ go.work.sum
 # Editor
 .idea/
 .vscode/
+
+# Upstream guacd tree fetched by CI, not part of this repo
+/guacd-src/

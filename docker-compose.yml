@@ -12,6 +12,8 @@ services:
       STILE_MASTER_KEY: /data/master.key
       # 登录凭证有效期、失败锁定次数和锁定时长都还没有定。
       # 下面三个值只是示例，不是产品规则。
+      # HTTPS 反向代理部署时改为 "true"；此项不会启用 TLS。
+      STILE_COOKIE_SECURE: "false"
       STILE_SESSION_TTL: "12h"
       STILE_LOCKOUT_FAILURES: "4"
       STILE_LOCKOUT_DURATION: "20m"

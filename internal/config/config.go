@@ -23,6 +23,9 @@ type Config struct {
 	SessionTTL      time.Duration
 	LockoutFailures int
 	LockoutDuration time.Duration
+	// CookieSecure requires HTTPS at the browser, including behind a TLS proxy.
+	// It defaults to false for local HTTP development.
+	CookieSecure bool
 	// GuacdAddress is optional. Empty means RDP cannot dial. SSH does not use it.
 	GuacdAddress string
 }
@@ -128,6 +131,12 @@ func applyKey(cfg *Config, key, val string) error {
 		cfg.Database = val
 	case "master_key":
 		cfg.MasterKey = val
+	case "cookie_secure":
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("cookie_secure: %w", err)
+		}
+		cfg.CookieSecure = b
 	case "session_ttl":
 		d, err := time.ParseDuration(val)
 		if err != nil {
@@ -165,6 +174,13 @@ func applyEnv(cfg *Config) error {
 	}
 	if v := os.Getenv("STILE_MASTER_KEY"); v != "" {
 		cfg.MasterKey = v
+	}
+	if v := os.Getenv("STILE_COOKIE_SECURE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("STILE_COOKIE_SECURE: %w", err)
+		}
+		cfg.CookieSecure = b
 	}
 	if v := os.Getenv("STILE_SESSION_TTL"); v != "" {
 		d, err := time.ParseDuration(v)

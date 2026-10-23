@@ -6,6 +6,10 @@ listen 127.0.0.1:8080
 database /var/lib/Stile/Stile.db
 master_key /etc/Stile/master.key
 
+# 本地 HTTP 保持 false；通过 HTTPS（含反向代理）访问时设置 true。
+# 这只设置 Cookie Secure 属性，不会启用 HTTPS。
+cookie_secure false
+
 # 示例，数值未定
 session_ttl 8h
 

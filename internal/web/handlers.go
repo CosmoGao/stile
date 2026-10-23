@@ -152,7 +152,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 			log.Printf("logout: %v", err)
 		}
 	}
-	clearSessionCookie(w)
+	s.clearSessionCookie(w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 

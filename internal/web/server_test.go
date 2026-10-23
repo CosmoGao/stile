@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"strings"
@@ -432,12 +433,18 @@ func TestTOTPOptionalAndAdminCanClear(t *testing.T) {
 
 func startServer(t *testing.T, failures int, lockFor, ttl time.Duration) (*web.Server, *httptest.Server, string) {
 	t.Helper()
+	return startCookieServer(t, failures, lockFor, ttl, false, false)
+}
+
+func startCookieServer(t *testing.T, failures int, lockFor, ttl time.Duration, secure, tls bool) (*web.Server, *httptest.Server, string) {
+	t.Helper()
 	dir := t.TempDir()
 	cfg := config.Config{
 		Listen:          "127.0.0.1:0",
 		Database:        dir + "/Stile.db",
 		MasterKey:       dir + "/master.key",
 		SessionTTL:      ttl,
+		CookieSecure:    secure,
 		LockoutFailures: failures,
 		LockoutDuration: lockFor,
 	}
@@ -454,7 +461,12 @@ func startServer(t *testing.T, failures int, lockFor, ttl time.Duration) (*web.S
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(srv.Handler())
+	ts := httptest.NewUnstartedServer(srv.Handler())
+	if tls {
+		ts.StartTLS()
+	} else {
+		ts.Start()
+	}
 	t.Cleanup(ts.Close)
 	return srv, ts, cfg.Database
 }
@@ -753,4 +765,87 @@ func (c *manualClock) Advance(d time.Duration) {
 	c.mu.Lock()
 	c.t = c.t.Add(d)
 	c.mu.Unlock()
+}
+
+func TestCookieLifecycle(t *testing.T) {
+	for _, mode := range []string{"HTTP", "HTTPS", "HTTPS proxy to HTTP"} {
+		t.Run(mode, func(t *testing.T) {
+			tls := mode != "HTTP"
+			_, ts, _ := startCookieServer(t, 3, time.Hour, 2*time.Hour, tls, mode == "HTTPS")
+			if mode == "HTTPS proxy to HTTP" {
+				upstream, err := url.Parse(ts.URL)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// No X-Forwarded-Proto is needed to secure cookies on the HTTP backend.
+				ts = httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(upstream))
+				t.Cleanup(ts.Close)
+			}
+			c := newClient(t)
+			c.Transport = ts.Client().Transport
+			_, body, res := get(t, c, ts.URL+"/setup")
+			assertCookiePolicy(t, res, "stile_csrf", tls)
+			status, _, res := postForm(t, c, ts.URL+"/setup", url.Values{
+				"csrf": {mustCSRF(t, body)}, "username": {"admin"}, "password": {"admin-password"},
+			})
+			if status != http.StatusSeeOther {
+				t.Fatalf("setup = %d", status)
+			}
+			assertCookiePolicy(t, res, "stile_session", tls)
+			for i := 0; i < 2; i++ {
+				status, body, _ = get(t, c, ts.URL+"/")
+				if status != http.StatusOK {
+					t.Fatalf("authenticated home = %d", status)
+				}
+				if tls {
+					u, _ := url.Parse(strings.Replace(ts.URL, "https:", "http:", 1))
+					if cookies := c.Jar.Cookies(u); len(cookies) != 0 {
+						t.Fatal("secure cookies available over HTTP")
+					}
+				}
+				status, _, res = postForm(t, c, ts.URL+"/logout", url.Values{"csrf": {mustCSRF(t, body)}})
+				if status != http.StatusSeeOther {
+					t.Fatalf("logout = %d", status)
+				}
+				deleted := assertCookiePolicy(t, res, "stile_session", tls)
+				if deleted.Value != "" || deleted.MaxAge != -1 || !deleted.Expires.Before(time.Now()) {
+					t.Fatalf("invalid deletion cookie: %+v", deleted)
+				}
+				u, _ := url.Parse(ts.URL)
+				for _, ck := range c.Jar.Cookies(u) {
+					if ck.Name == "stile_session" {
+						t.Fatal("session remains after logout")
+					}
+				}
+				status, _, _ = get(t, c, ts.URL+"/")
+				if status != http.StatusSeeOther {
+					t.Fatalf("home after logout = %d", status)
+				}
+				if i == 0 {
+					_, body, _ = get(t, c, ts.URL+"/login")
+					status, _, res = postForm(t, c, ts.URL+"/login", url.Values{
+						"csrf": {mustCSRF(t, body)}, "username": {"admin"}, "password": {"admin-password"},
+					})
+					if status != http.StatusSeeOther {
+						t.Fatalf("login = %d", status)
+					}
+					assertCookiePolicy(t, res, "stile_session", tls)
+				}
+			}
+		})
+	}
+}
+
+func assertCookiePolicy(t *testing.T, res *http.Response, name string, secure bool) *http.Cookie {
+	t.Helper()
+	for _, ck := range res.Cookies() {
+		if ck.Name == name {
+			if ck.Secure != secure || !ck.HttpOnly || ck.SameSite != http.SameSiteLaxMode || ck.Path != "/" || ck.Domain != "" {
+				t.Fatalf("unexpected %s policy: %+v", name, ck)
+			}
+			return ck
+		}
+	}
+	t.Fatalf("missing %s cookie", name)
+	return nil
 }

@@ -16,6 +16,7 @@ func clearEnv(t *testing.T) {
 		"STILE_DATABASE",
 		"STILE_MASTER_KEY",
 		"STILE_SESSION_TTL",
+		"STILE_COOKIE_SECURE",
 		"STILE_LOCKOUT_FAILURES",
 		"STILE_LOCKOUT_DURATION",
 		"GUACD_ADDRESS",
@@ -177,5 +178,39 @@ func TestGuacdAddressOptional(t *testing.T) {
 	}
 	if cfg.GuacdAddress != "127.0.0.1:4822" {
 		t.Fatalf("guacd = %q", cfg.GuacdAddress)
+	}
+}
+
+func TestCookieSecureConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, env string
+		want, wantErr   bool
+	}{
+		{name: "omitted"},
+		{name: "file false", file: "cookie_secure false"},
+		{name: "file true", file: "cookie_secure true", want: true},
+		{name: "env true", env: "true", want: true},
+		{name: "env overrides true", file: "cookie_secure true", env: "false"},
+		{name: "env overrides false", file: "cookie_secure false", env: "true", want: true},
+		{name: "invalid file", file: "cookie_secure typo", wantErr: true},
+		{name: "invalid env", env: "typo", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearEnv(t)
+			path := filepath.Join(t.TempDir(), "stile.conf")
+			body := "listen 127.0.0.1:9\ndatabase test.db\nmaster_key test.key\nsession_ttl 2h\nlockout_failures 2\nlockout_duration 30s\n" + tc.file + "\n"
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("STILE_CONFIG", path)
+			t.Setenv("STILE_COOKIE_SECURE", tc.env)
+			cfg, err := Load()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Load error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if err == nil && cfg.CookieSecure != tc.want {
+				t.Fatalf("CookieSecure = %v, want %v", cfg.CookieSecure, tc.want)
+			}
+		})
 	}
 }

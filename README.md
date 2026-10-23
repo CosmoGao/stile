@@ -58,11 +58,32 @@ Stile（Secure Terminals in a Lightweight Enclosure）是一个开源、轻量�
 - `STILE_ADDR` 或 `STILE_LISTEN`：监听地址。两个都有时用 `STILE_LISTEN`
 - `STILE_DATABASE`：SQLite 路径
 - `STILE_MASTER_KEY`：主密钥路径
+- `STILE_COOKIE_SECURE`：对应 `cookie_secure`，默认 `false`；通过 HTTPS 访问时设为 `true`，包括反向代理终止 HTTPS 的部署
 - `STILE_SESSION_TTL`：登录凭证有效期，例如 `8h`
 - `STILE_LOCKOUT_FAILURES`：失败多少次后锁定
 - `STILE_LOCKOUT_DURATION`：锁定多久，例如 `10m`
 - `STILE_CONFIG`：配置文件路径
 - `GUACD_ADDRESS`：外部 guacd 1.4.0 的地址，例如 `127.0.0.1:4822`。配置文件里的键是 `guacd`，这个环境变量会覆盖它。不设置时网页 RDP 连不上，网页 SSH 不受影响
+
+### HTTPS 与 Cookie
+
+本地普通 HTTP 开发可保持 `cookie_secure false`。对浏览器提供 HTTPS 时，在配置文件中设置：
+
+```text
+cookie_secure true
+```
+
+或设置环境变量 `STILE_COOKIE_SECURE=true`（覆盖文件；显式 `false` 也会覆盖）。值按 Go 布尔格式解析，建议使用 `true` / `false`；非法值会使启动失败，空环境变量不覆盖文件。修改后重启 Stile。此设置同时控制 `stile_session`、`stile_csrf` 以及退出登录时用于删除会话 Cookie 的 `Secure` 属性；保留现有 `HttpOnly`、`SameSite=Lax` 和 `Path=/`。
+
+`Secure` 只要求浏览器通过 HTTPS 发送 Cookie，不会启用 TLS、加密 HTTP 页面或保护通过 HTTP 提交的口令，因此不能替代 HTTPS。普通 HTTP 环境启用它会使登录/CSRF 流程无法正常工作（不要依赖浏览器对 localhost 的例外）。
+
+通过 Nginx、Caddy 等反向代理部署时：
+
+- 在代理配置有效证书和 HTTPS，将 HTTP 入口重定向到 HTTPS，首次初始化和登录也必须使用 HTTPS；确认 HTTPS 正常后可在代理启用 HSTS。
+- 即使代理到 Stile 的上游是 HTTP，也应显式启用 `cookie_secure true`。Stile 不根据 `X-Forwarded-Proto`、`Forwarded` 或请求 TLS 状态自动切换此配置，伪造这些头不能改变 Cookie 策略。
+- 将 Stile 的 HTTP 端口限制在回环地址或仅代理可达的受信网络，不要让用户绕过代理直接访问。Docker Compose 示例的 `8080:8080` 会对外绑定端口：同机代理可改成 `127.0.0.1:8080:8080`，同网络容器代理可移除端口发布。跨不受信网络的上游连接仍需额外的传输加密。
+- 保留浏览器访问的 Host，正确转发同源 WebSocket（Nginx 配置 HTTP/1.1、Upgrade 和 Connection 头），确保 SSH/RDP 的 `wss://` 连接可用。代理应覆盖或移除客户端传入的转发头，而不是直接信任它们。
+- 从 HTTP 迁移后，清除站点旧 Cookie 并通过 HTTPS 重新登录，使现有 Cookie 也采用新属性。可在浏览器开发者工具确认两个 Cookie 均带 `Secure`，退出时会话删除 Cookie 也带相同属性。
 
 ## 页面
 

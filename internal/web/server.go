@@ -208,6 +208,7 @@ func (s *Server) ensureCSRF(w http.ResponseWriter, r *http.Request) string {
 		Value:    val,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	return val
@@ -245,18 +246,20 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, raw []byte) {
 		Value:    base64.RawURLEncoding.EncodeToString(raw),
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  now.Add(s.cfg.SessionTTL),
 		MaxAge:   int(s.cfg.SessionTTL.Seconds()),
 	})
 }
 
-func clearSessionCookie(w http.ResponseWriter) {
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0).UTC(),
